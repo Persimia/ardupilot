@@ -239,6 +239,12 @@
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
+// Dock - Vehicle yaws to point at surface
+#ifndef MODE_DOCK_ENABLED
+# define MODE_DOCK_ENABLED ENABLED
+#endif
+
+//////////////////////////////////////////////////////////////////////////////
 // Flowhold - use optical flow to hover in place
 #ifndef MODE_FLOWHOLD_ENABLED
 # define MODE_FLOWHOLD_ENABLED AP_OPTICALFLOW_ENABLED
