@@ -191,6 +191,12 @@
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
+// Assisted Loiter mode - allows vehicle to hold global position with yaw inputs from computer
+#ifndef MODE_LOITER_ASSISTED_ENABLED
+# define MODE_LOITER_ASSISTED_ENABLED ENABLED
+#endif
+
+//////////////////////////////////////////////////////////////////////////////
 // Position Hold - enable holding of global position
 #ifndef MODE_POSHOLD_ENABLED
 # define MODE_POSHOLD_ENABLED ENABLED
