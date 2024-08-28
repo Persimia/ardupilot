@@ -1,4 +1,5 @@
 #include "Copter.h"
+#include <GCS_MAVLink/GCS.h>
 
 #if MODE_LOITER_ASSISTED_ENABLED == ENABLED
 
@@ -9,6 +10,7 @@
 // loiter_init - initialise loiter controller
 bool ModeLoiterAssisted::init(bool ignore_checks)
 {
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Switched to loiter assisted!");
     if (!copter.failsafe.radio) {
         float target_roll, target_pitch;
         // apply SIMPLE mode transform to pilot inputs
@@ -37,6 +39,10 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
 #if AC_PRECLAND_ENABLED
     _precision_loiter_active = false;
 #endif
+
+    gcs().send_text(MAV_SEVERITY_CRITICAL, "Setting auto yaw to hold mode");
+    // Set auto yaw
+    auto_yaw.set_mode(AutoYaw::Mode::HOLD);
 
     return true;
 }
@@ -186,8 +192,14 @@ void ModeLoiterAssisted::run()
 #endif
 
         // call attitude controller
-        attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
-
+        static uint8_t counter = 0;
+        counter++;
+        if (counter > 254) {
+            counter = 0;
+            gcs().send_text(MAV_SEVERITY_CRITICAL, "Calling auto yaw");
+        }
+        // attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
+        attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), auto_yaw.get_heading());
         // get avoidance adjusted climb rate
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
 
