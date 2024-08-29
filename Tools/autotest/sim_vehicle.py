@@ -834,6 +834,9 @@ def start_vehicle(binary, opts, stuff, spawns=None):
 
     cmd.append("--sim-address=%s" % cmd_opts.sim_address)
 
+    if cmd_opts.synthetic_clock:
+        cmd.append("--synthetic-clock")
+
     old_dir = os.getcwd()
     for i, i_dir in zip(instances, instance_dir):
         c = ["-I" + str(i)]
@@ -1340,6 +1343,8 @@ group_sim.add_option("--enable-ppp", action='store_true',
                      help="Enable PPP networking")
 group_sim.add_option("--enable-networking-tests", action='store_true',
                      help="Enable networking tests")
+group_sim.add_option("--synthetic-clock", action='store_true',
+                     help="Enable synthetic clock")
 
 parser.add_option_group(group_sim)
 
