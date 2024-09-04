@@ -144,8 +144,6 @@ void AP_Proximity_LightWareSF45B::process_message()
         const float distance_m = _distance_filt.apply((int16_t)UINT16_VALUE(_msg.payload[1], _msg.payload[0])) * 0.01f;
         const float angle_deg = correct_angle_for_orientation((int16_t)UINT16_VALUE(_msg.payload[3], _msg.payload[2]) * 0.01f);
 
-        fprintf(stderr, "Receiving Angle: %.2f, Distance %.2f\n", angle_deg, distance_m);
-
         // if distance is from a new face then update distance, angle and boundary for previous face
         // get face from 3D boundary based on yaw angle to the object
         const AP_Proximity_Boundary_3D::Face face = frontend.boundary.get_face(angle_deg);
