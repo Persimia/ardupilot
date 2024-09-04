@@ -1,6 +1,6 @@
 #include "Copter.h"
 
-#if MODE_LOITER_ENABLED == ENABLED
+#if MODE_DOCK_ENABLED == ENABLED
 
 /*
  * Init and run calls for loiter flight mode
@@ -87,6 +87,13 @@ void ModeDock::run()
     float target_yaw_rate = 0.0f;
     float target_climb_rate = 0.0f;
 
+    // Get Yaw angle and distabce to closest object from AP_Proximity
+    float target_yaw_angle;
+    float separation;
+    g2.proximity.get_closest_object(target_yaw_angle,separation);
+    // Get Vehicle Heading
+    float heading = ahrs.get_yaw()*RAD_TO_DEG;
+
     // set vertical speed and acceleration limits
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
 
@@ -118,10 +125,10 @@ void ModeDock::run()
     }
 
     // Loiter State Machine Determination
-    AltHoldModeState loiter_state = get_alt_hold_state(target_climb_rate);
+    AltHoldModeState dock_state = get_alt_hold_state(target_climb_rate);
 
     // Loiter State Machine
-    switch (loiter_state) {
+    switch (dock_state) {
 
     case AltHoldModeState::MotorStopped:
         attitude_control->reset_rate_controller_I_terms();
@@ -155,7 +162,7 @@ void ModeDock::run()
         takeoff.do_pilot_takeoff(target_climb_rate);
 
         // run loiter controller
-        loiter_nav->update();
+        loiter_nav->update(false); // false => don't run obstacle avoidance
 
         // call attitude controller
         attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
@@ -179,14 +186,18 @@ void ModeDock::run()
         }
         // run loiter controller if we are not doing prec loiter
         if (!_precision_loiter_active) {
-            loiter_nav->update();
+            loiter_nav->update(false); // false => don't run obstacle avoidance
         }
 #else
-        loiter_nav->update();
+        loiter_nav->update(false); // false => don't run obstacle avoidance
 #endif
-
+        
         // call attitude controller
-        attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
+        AC_AttitudeControl::HeadingCommand heading_command;
+        heading_command.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
+        //TODO Update Heading Command only when we have new data from lidar
+        heading_command.yaw_angle_cd = wrap_360(target_yaw_angle+heading)*100.0f; // Compute absolute heading target
+        attitude_control->input_thrust_vector_heading(loiter_nav->get_thrust_vector(), heading_command);
 
         // get avoidance adjusted climb rate
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
