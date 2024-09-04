@@ -39,7 +39,7 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
 #if AC_PRECLAND_ENABLED
     _precision_loiter_active = false;
 #endif
-    // Set auto yaw
+    // // Set auto yaw... auto yaw is used in auto modes normally, so we shouldn't do that here
     auto_yaw.set_mode(AutoYaw::Mode::HOLD);
 
     return true;
@@ -90,6 +90,13 @@ void ModeLoiterAssisted::run()
     float target_roll, target_pitch;
     float target_yaw_rate = 0.0f;
     float target_climb_rate = 0.0f;
+
+    // Get Yaw angle and distance to closest object from AP_Proximity
+    float target_yaw_angle_deg;
+    float separation;
+    g2.proximity.get_closest_object(target_yaw_angle_deg, separation);
+    // Get Vehicle Heading
+    // float heading = ahrs.get_yaw()*RAD_TO_DEG;
 
     // set vertical speed and acceleration limits
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
@@ -185,11 +192,29 @@ void ModeLoiterAssisted::run()
         if (!_precision_loiter_active) {
             loiter_nav->update();
         }
-#else
+#else  
         loiter_nav->update();
 #endif
         // attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
+        // attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), auto_yaw.get_heading());
+
+        // // call attitude controller
+        // AC_AttitudeControl::HeadingCommand heading_command;
+        // heading_command.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
+        // //TODO Update Heading Command only when we have new data from lidar
+        // heading_command.yaw_angle_cd = wrap_360(target_yaw_angle_deg+heading)*100.0f; // Compute absolute heading target
+        // // attitude_control->input_thrust_vector_heading(loiter_nav->get_thrust_vector(), heading_command);
+
+        if (millis() - auto_yaw.get_last_update_ms() > 200 || auto_yaw.reached_fixed_yaw_target()) {
+            target_yaw_angle_deg = wrap_180(target_yaw_angle_deg);
+            int8_t direction = (target_yaw_angle_deg >= 0 ? 1.0 : -1.0);
+            auto_yaw.set_fixed_yaw(abs(target_yaw_angle_deg), 0.0f, direction, true);
+            ::fprintf(stderr,"Target hdg: %.2f, Direction: %i\n",target_yaw_angle_deg, direction);
+        }
+        
+
         attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), auto_yaw.get_heading());
+
         // get avoidance adjusted climb rate
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
 
