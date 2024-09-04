@@ -253,15 +253,16 @@ private:
         _state = newstate;
     }
 
-    void update_output(const Location &location);
+    void update_output();
     void update_output_responses();
-    void update_output_scan(const Location &location);
+    void update_output_scan();
 
     uint32_t last_scan_output_time_ms;
 
     float last_degrees_bf;  // previous iteration's lidar angle
-    float last_dir = 1;     // previous iterations movement direction.  +1 CW, -1 for CCW
-
+    bool scan_cw = true;     // are we scanning cw or ccw?
+    uint32_t last_scan_iter = 0; // how far did we get in the previous scan?
+    const uint32_t batch_size = 10; // how many things should we send to the serial buffer at once?
 };
 
 };

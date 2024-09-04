@@ -80,6 +80,8 @@ def build(bld):
 
         idl_path = pathlib.PurePath(idl.abspath())
         b = idl_path.name
+        if 'LaserScan' in b:
+            container_prealloc_size = 256
 
         gen_h = idl_path.with_suffix('.h').name
         gen_c = idl_path.with_suffix('.c').name

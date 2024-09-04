@@ -20,6 +20,7 @@
 #include "geographic_msgs/msg/GeoPointStamped.h"
 #include "geographic_msgs/msg/GeoPoseStamped.h"
 #include "rosgraph_msgs/msg/Clock.h"
+#include "sensor_msgs/msg/LaserScan.h"
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/Scheduler.h>
@@ -78,6 +79,8 @@ private:
     tf2_msgs_msg_TFMessage tx_static_transforms_topic;
     // incoming transforms
     static tf2_msgs_msg_TFMessage rx_dynamic_transforms_topic;
+    // incoming 360 lidar data
+    static sensor_msgs_msg_LaserScan rx_laser_scan_topic;
 
     HAL_Semaphore csem;
 
@@ -272,6 +275,11 @@ public:
         const uxrQoS_t qos;
     };
     static const struct Service_table services[];
+
+    static const sensor_msgs_msg_LaserScan* getLaserScanData() {
+        return &rx_laser_scan_topic;
+    };
+    static bool rx_laser_scan_used;
 };
 
 #endif // AP_DDS_ENABLED

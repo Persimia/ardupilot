@@ -24,6 +24,8 @@
 #include <stdio.h>
 #include <errno.h>
 
+#include <AP_DDS/AP_DDS_Client.h>
+
 using namespace SITL;
 
 uint32_t PS_LightWare_SF45B::packet_for_location(const Location &location,
@@ -146,15 +148,15 @@ void PS_LightWare_SF45B::update_input()
 void PS_LightWare_SF45B::update(const Location &location)
 {
     update_input();
-    update_output(location);
+    update_output();
 }
 
-void PS_LightWare_SF45B::update_output(const Location &location)
+void PS_LightWare_SF45B::update_output()
 {
     switch (_state) {
     case State::SCANNING:
         update_output_responses();
-        update_output_scan(location);
+        update_output_scan();
         return;
     }
 }
@@ -181,56 +183,156 @@ void PS_LightWare_SF45B::update_output_responses()
     }
 }
 
-void PS_LightWare_SF45B::update_output_scan(const Location &location)
+// void PS_LightWare_SF45B::update_output_scan(const Location &location)
+// {
+//     const uint32_t now_ms = AP_HAL::millis();
+//     const uint32_t time_delta_ms = (now_ms - last_scan_output_time_ms);
+//     if (time_delta_ms > 1000) {
+//         last_scan_output_time_ms = now_ms;
+//         return;
+//     }
+
+//     const uint32_t samples_per_second = 133;
+//     const float samples_per_ms = samples_per_second / 1000.0f;
+//     const uint32_t sample_count = samples_per_ms * time_delta_ms;
+//     const float degrees_per_ms = 390 / 1000.0f;
+//     const float degrees_per_sample = degrees_per_ms / samples_per_ms;
+
+// //    ::fprintf(stderr, "Packing %u samples in for %ums interval (%f degrees/sample)\n", sample_count, time_delta, degrees_per_sample);
+
+//     last_scan_output_time_ms += sample_count/samples_per_ms;
+
+//     for (uint32_t i=0; i<sample_count; i++) {
+
+//         const float ANGLE_MIN_DEG = -170;
+//         const float ANGLE_MAX_DEG = +170;
+//         float current_degrees_bf = last_degrees_bf + (last_dir * degrees_per_sample);
+//         if (current_degrees_bf < ANGLE_MIN_DEG) {
+//             current_degrees_bf += (ANGLE_MIN_DEG - current_degrees_bf);
+//             last_dir = -last_dir;
+//         }
+//         if (current_degrees_bf > ANGLE_MAX_DEG) {
+//             current_degrees_bf += (ANGLE_MAX_DEG - current_degrees_bf);
+//             last_dir = -last_dir;
+//         }
+//         last_degrees_bf = current_degrees_bf;
+
+
+//         const float MAX_RANGE = 53.0f;
+//         // float distance = AP_DDS_Client::rx_laser_scan_topic.ranges[0]
+//         float distance = measure_distance_at_angle_bf(location, current_degrees_bf); // Old method: distance in meters
+//         // ::fprintf(stderr, "SIM: %f=%fm\n", current_degrees_bf, distance);
+//         if (distance > MAX_RANGE) {
+//             // sensor returns -1 for out-of-range
+//             distance = -1.0f;
+//         }
+
+//         PackedMessage<DistanceDataCM> packed_distance_data {
+//             DistanceDataCM(
+//                 uint16_t(distance*100.0),
+//                 wrap_180(current_degrees_bf) * 100
+//                 ), 0x1 };
+//         packed_distance_data.update_checksum();
+//         send((char*)&packed_distance_data, sizeof(packed_distance_data));
+//     }
+// }
+
+// void PS_LightWare_SF45B::update_output_scan()
+// {
+//     if (AP_DDS_Client::rx_laser_scan_used) {
+//         return;
+//     }
+
+//     const uint32_t now_ms = AP_HAL::millis();
+//     const uint32_t time_delta_ms = (now_ms - last_scan_output_time_ms);
+//     if (time_delta_ms > 1000) {
+//         last_scan_output_time_ms = now_ms;
+//         return;
+//     }
+
+//     // Get full scan
+//     const sensor_msgs_msg_LaserScan* rx_laser_scan_topic = AP_DDS_Client::getLaserScanData();
+//     const uint32_t sample_count = rx_laser_scan_topic->ranges_size;
+//     const float ANGLE_MIN = rx_laser_scan_topic->angle_min;
+//     // const float ANGLE_MAX_DEG = rx_laser_scan_topic->angle_max;
+//     const float MAX_RANGE = rx_laser_scan_topic->range_max;
+//     const float MIN_RANGE = rx_laser_scan_topic->range_min;
+//     const float angle_increment = rx_laser_scan_topic->angle_increment;
+//     float current_angle_bf = ANGLE_MIN;
+
+//     // Send serial data for each point
+//     for (uint32_t i=0; i<sample_count; i++) {
+//         float distance = rx_laser_scan_topic->ranges[i];
+//         if (distance > MAX_RANGE) {
+//             // sensor returns -1 for out-of-range
+//             distance = -1.0f;
+//         }
+//         if (distance < MIN_RANGE) {
+//             // sensor returns -1 for out-of-range
+//             distance = -1.0f;
+//         }
+
+//         ::fprintf(stderr, "Sending Angle: %.2f, Distance %.2f\n", RAD_TO_DEG*current_angle_bf, distance);
+
+//         PackedMessage<DistanceDataCM> packed_distance_data {
+//             DistanceDataCM(
+//                 uint16_t(distance*100.0),
+//                 wrap_180(RAD_TO_DEG*current_angle_bf) * 100
+//                 ), 0x1 };
+//         packed_distance_data.update_checksum();
+//         send((char*)&packed_distance_data, sizeof(packed_distance_data));
+
+//         current_angle_bf += angle_increment;
+//     }
+//     AP_DDS_Client::rx_laser_scan_used = true;
+// }
+
+void PS_LightWare_SF45B::update_output_scan()
 {
-    const uint32_t now_ms = AP_HAL::millis();
-    const uint32_t time_delta_ms = (now_ms - last_scan_output_time_ms);
-    if (time_delta_ms > 1000) {
-        last_scan_output_time_ms = now_ms;
+    if (AP_DDS_Client::rx_laser_scan_used) {
         return;
     }
 
-    const uint32_t samples_per_second = 133;
-    const float samples_per_ms = samples_per_second / 1000.0f;
-    const uint32_t sample_count = samples_per_ms * time_delta_ms;
-    const float degrees_per_ms = 390 / 1000.0f;
-    const float degrees_per_sample = degrees_per_ms / samples_per_ms;
+    // Get full scan
+    const sensor_msgs_msg_LaserScan* rx_laser_scan_topic = AP_DDS_Client::getLaserScanData();
+    const uint32_t sample_count = rx_laser_scan_topic->ranges_size;
+    const float ANGLE_MAX = rx_laser_scan_topic->angle_max;
+    // const float ANGLE_MAX_DEG = rx_laser_scan_topic->angle_max;
+    const float MAX_RANGE = rx_laser_scan_topic->range_max;
+    const float MIN_RANGE = rx_laser_scan_topic->range_min;
+    const float angle_increment = rx_laser_scan_topic->angle_increment;
 
-//    ::fprintf(stderr, "Packing %u samples in for %ums interval (%f degrees/sample)\n", sample_count, time_delta, degrees_per_sample);
-
-    last_scan_output_time_ms += sample_count/samples_per_ms;
-
-    for (uint32_t i=0; i<sample_count; i++) {
-
-        const float ANGLE_MIN_DEG = -170;
-        const float ANGLE_MAX_DEG = +170;
-        float current_degrees_bf = last_degrees_bf + (last_dir * degrees_per_sample);
-        if (current_degrees_bf < ANGLE_MIN_DEG) {
-            current_degrees_bf += (ANGLE_MIN_DEG - current_degrees_bf);
-            last_dir = -last_dir;
+    // Send serial data for each point
+    for (uint32_t i=0; i<batch_size; i++) {
+        if (last_scan_iter >= sample_count) {
+            AP_DDS_Client::rx_laser_scan_used = true;
+            scan_cw = !scan_cw;
+            last_scan_iter = 0;
         }
-        if (current_degrees_bf > ANGLE_MAX_DEG) {
-            current_degrees_bf += (ANGLE_MAX_DEG - current_degrees_bf);
-            last_dir = -last_dir;
+        uint32_t idx = last_scan_iter;
+        if (!scan_cw) {
+            idx = sample_count - last_scan_iter;
         }
-        last_degrees_bf = current_degrees_bf;
+        const float current_angle_bf = ANGLE_MAX - angle_increment * idx;
+        // ::fprintf(stderr, "Idx: %i, Samples: %i\n ", idx, sample_count);
+        float distance = rx_laser_scan_topic->ranges[idx];
 
-
-        const float MAX_RANGE = 53.0f;
-        float distance = measure_distance_at_angle_bf(location, current_degrees_bf);
-        // ::fprintf(stderr, "SIM: %f=%fm\n", current_degrees_bf, distance);
-        if (distance > MAX_RANGE) {
+        if (distance > MAX_RANGE || distance < MIN_RANGE) {
             // sensor returns -1 for out-of-range
             distance = -1.0f;
         }
 
+        // ::fprintf(stderr, "Idx: %i, Sending Angle: %.2f, Distance %.2f\n", idx, RAD_TO_DEG*current_angle_bf, distance);
+
         PackedMessage<DistanceDataCM> packed_distance_data {
             DistanceDataCM(
                 uint16_t(distance*100.0),
-                wrap_180(current_degrees_bf) * 100
+                wrap_180(RAD_TO_DEG*current_angle_bf) * 100
                 ), 0x1 };
         packed_distance_data.update_checksum();
         send((char*)&packed_distance_data, sizeof(packed_distance_data));
+
+        last_scan_iter++;
     }
 }
 

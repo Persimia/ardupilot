@@ -1266,12 +1266,21 @@ const AP_Param::GroupInfo SIM::ModelParm::var_info[] = {
     AP_GROUPEND
 };
     
-const Location post_origin {
-    518752066,
-    146487830,
+// -35.363262 149.165237 origin of Runway
+const Location post_origin { 
+    -353632620,
+    1491652370,
     0,
     Location::AltFrame::ABSOLUTE
 };
+
+// // original location
+// const Location post_origin { 
+//     518752066,
+//     146487830,
+//     0,
+//     Location::AltFrame::ABSOLUTE
+// };
 
 /* report SITL state via MAVLink SIMSTATE*/
 void SIM::simstate_send(mavlink_channel_t chan) const

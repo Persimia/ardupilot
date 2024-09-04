@@ -26,6 +26,7 @@ enum class TopicIndex: uint8_t {
     DYNAMIC_TRANSFORMS_SUB,
     VELOCITY_CONTROL_SUB,
     GLOBAL_POSITION_SUB,
+    LASER_SCAN_SUB,
 };
 
 static inline constexpr uint8_t to_underlying(const TopicIndex index)
@@ -253,6 +254,22 @@ constexpr struct AP_DDS_Client::Topic_table AP_DDS_Client::topics[] = {
         .topic_rw = Topic_rw::DataReader,
         .topic_name = "rt/ap/cmd_gps_pose",
         .type_name = "ardupilot_msgs::msg::dds_::GlobalPosition_",
+        .qos = {
+            .durability = UXR_DURABILITY_VOLATILE,
+            .reliability = UXR_RELIABILITY_BEST_EFFORT,
+            .history = UXR_HISTORY_KEEP_LAST,
+            .depth = 5,
+        },
+    },
+    {
+        .topic_id = to_underlying(TopicIndex::LASER_SCAN_SUB),
+        .pub_id = to_underlying(TopicIndex::LASER_SCAN_SUB),
+        .sub_id = to_underlying(TopicIndex::LASER_SCAN_SUB),
+        .dw_id = uxrObjectId{.id=to_underlying(TopicIndex::LASER_SCAN_SUB), .type=UXR_DATAWRITER_ID},
+        .dr_id = uxrObjectId{.id=to_underlying(TopicIndex::LASER_SCAN_SUB), .type=UXR_DATAREADER_ID},
+        .topic_rw = Topic_rw::DataReader,
+        .topic_name = "rt/scan",
+        .type_name = "sensor_msgs::msg::dds_::LaserScan_",
         .qos = {
             .durability = UXR_DURABILITY_VOLATILE,
             .reliability = UXR_RELIABILITY_BEST_EFFORT,

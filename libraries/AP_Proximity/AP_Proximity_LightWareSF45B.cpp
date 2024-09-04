@@ -26,6 +26,8 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/utility/sparse-endian.h>
 
+#include <stdio.h>
+
 extern const AP_HAL::HAL& hal;
 
 static const uint32_t PROXIMITY_SF45B_TIMEOUT_MS = 200;
@@ -141,6 +143,8 @@ void AP_Proximity_LightWareSF45B::process_message()
         _last_distance_received_ms = AP_HAL::millis();
         const float distance_m = _distance_filt.apply((int16_t)UINT16_VALUE(_msg.payload[1], _msg.payload[0])) * 0.01f;
         const float angle_deg = correct_angle_for_orientation((int16_t)UINT16_VALUE(_msg.payload[3], _msg.payload[2]) * 0.01f);
+
+        fprintf(stderr, "Receiving Angle: %.2f, Distance %.2f\n", angle_deg, distance_m);
 
         // if distance is from a new face then update distance, angle and boundary for previous face
         // get face from 3D boundary based on yaw angle to the object
