@@ -169,6 +169,49 @@ void AC_Loiter::set_pilot_desired_acceleration(float euler_roll_angle_cd, float 
     _predicted_accel.y = predicted_accel.y;
 }
 
+/// set pilot desired acceleration in centi-degrees
+//   dt should be the time (in seconds) since the last call to this function
+//   Sets the desired acceleration relative to the nearest obstacle (or whatever frame is described by the 2D rotation given by direction)
+void AC_Loiter::set_pilot_desired_acceleration(float euler_roll_angle_cd, float euler_pitch_angle_cd, float yaw_to_obs_deg)
+{
+    const float dt = _attitude_control.get_dt();
+    // Convert from centidegrees on public interface to radians
+    const float euler_roll_angle = radians(euler_roll_angle_cd * 0.01f);
+    const float euler_pitch_angle = radians(euler_pitch_angle_cd * 0.01f);
+
+    // Rotate the pitch and roll angles by obstacle_direction
+    const float cos_obstacle = cosf(radians(yaw_to_obs_deg));
+    const float sin_obstacle = sinf(radians(yaw_to_obs_deg));
+
+    // Create a 2D vector of the roll and pitch angles
+    const float rotated_euler_roll = euler_roll_angle * cos_obstacle - euler_pitch_angle * sin_obstacle;
+    const float rotated_euler_pitch = euler_roll_angle * sin_obstacle + euler_pitch_angle * cos_obstacle;
+
+    // convert our rotated desired attitude to an acceleration vector assuming we are not accelerating vertically
+    const Vector3f desired_euler {rotated_euler_roll, rotated_euler_pitch, _ahrs.yaw};
+    const Vector3f desired_accel = _pos_control.lean_angles_to_accel(desired_euler);
+
+    _desired_accel.x = desired_accel.x;
+    _desired_accel.y = desired_accel.y;
+
+    // difference between where we think we should be and where we want to be
+    Vector2f angle_error(wrap_PI(rotated_euler_roll - _predicted_euler_angle.x), wrap_PI(rotated_euler_pitch - _predicted_euler_angle.y));
+
+    // calculate the angular velocity that we would expect given our desired and predicted attitude
+    _attitude_control.input_shaping_rate_predictor(angle_error, _predicted_euler_rate, dt);
+
+    // update our predicted attitude based on our predicted angular velocity
+    _predicted_euler_angle += _predicted_euler_rate * dt;
+
+    // convert our predicted attitude to an acceleration vector assuming we are not accelerating vertically
+    const Vector3f predicted_euler {_predicted_euler_angle.x, _predicted_euler_angle.y, _ahrs.yaw};
+    const Vector3f predicted_accel = _pos_control.lean_angles_to_accel(predicted_euler);
+
+    _predicted_accel.x = predicted_accel.x;
+    _predicted_accel.y = predicted_accel.y;
+}
+
+
 /// get vector to stopping point based on a horizontal position and velocity
 void AC_Loiter::get_stopping_point_xy(Vector2f& stopping_point) const
 {

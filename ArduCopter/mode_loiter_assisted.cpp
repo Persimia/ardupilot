@@ -91,13 +91,6 @@ void ModeLoiterAssisted::run()
     float target_yaw_rate = 0.0f;
     float target_climb_rate = 0.0f;
 
-    // Get Yaw angle and distance to closest object from AP_Proximity
-    float target_yaw_angle_deg;
-    float separation;
-    g2.proximity.get_closest_object(target_yaw_angle_deg, separation);
-    // Get Vehicle Heading
-    // float heading = ahrs.get_yaw()*RAD_TO_DEG;
-
     // set vertical speed and acceleration limits
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
 
@@ -173,61 +166,82 @@ void ModeLoiterAssisted::run()
         break;
 
     case AltHoldModeState::Flying:
+        // Get Yaw angle and distance to closest object from AP_Proximity
+        float yaw_to_obs_deg; // yaw angle is measured in the local frame
+        float dist_to_obs_m;
+        bool success = g2.proximity.get_closest_object(yaw_to_obs_deg, dist_to_obs_m);
+
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-#if AC_PRECLAND_ENABLED
-        bool precision_loiter_old_state = _precision_loiter_active;
-        if (do_precision_loiter()) {
-            precision_loiter_xy();
-            _precision_loiter_active = true;
-        } else {
-            _precision_loiter_active = false;
-        }
-        if (precision_loiter_old_state && !_precision_loiter_active) {
-            // prec loiter was active, not any more, let's init again as user takes control
-            loiter_nav->init_target();
-        }
-        // run loiter controller if we are not doing prec loiter
-        if (!_precision_loiter_active) {
+        if (success) {
+            copter.set_simple_mode(Copter::SimpleMode::NONE); // disable simple mode for this mode. TODO: Validate
+            // convert pilot input to lean angles
+            get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
+
+            // process pilot's roll and pitch input in the frame defined by the obstacle!
+            loiter_nav->set_pilot_desired_acceleration(target_roll, target_pitch, yaw_to_obs_deg);
+            loiter_nav->update(false); // Pass false here to avoid using obstacle avoidance
+
+            // YAW CONTROLLER //
+            /*Update the heading controller at a low rate (this is because the auto yaw controller uses
+            a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/ 
+            if (millis() - auto_yaw.get_last_update_ms() > 200 || auto_yaw.reached_fixed_yaw_target()) {
+                yaw_to_obs_deg = wrap_180(yaw_to_obs_deg);
+                int8_t direction = (yaw_to_obs_deg >= 0 ? 1.0 : -1.0);
+                auto_yaw.set_fixed_yaw(abs(yaw_to_obs_deg), 0.0f, direction, true);
+            }
+            // END YAW CONTROLLER //
+            
+            // AUGMENT CONTROL //
+            attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), auto_yaw.get_heading());
+            // get avoidance adjusted climb rate
+            #if AP_RANGEFINDER_ENABLED
+            // update the vertical offset based on the surface measurement
+            copter.surface_tracking.update_surface_offset();
+            #endif
+            // Send the commanded climb rate to the position controller
+            pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
+            break;
+            // END AUGMENT CONTROL //
+
+        } else { //default to normal loiter when no obstacles are detected
+            #if AC_PRECLAND_ENABLED
+            bool precision_loiter_old_state = _precision_loiter_active;
+            if (do_precision_loiter()) {
+                precision_loiter_xy();
+                _precision_loiter_active = true;
+            } else {
+                _precision_loiter_active = false;
+            }
+            if (precision_loiter_old_state && !_precision_loiter_active) {
+                // prec loiter was active, not any more, let's init again as user takes control
+                loiter_nav->init_target();
+            }
+            // run loiter controller if we are not doing prec loiter
+            if (!_precision_loiter_active) {
+                loiter_nav->update();
+            }
+            #else
             loiter_nav->update();
+            #endif
+
+            // call attitude controller
+            attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
+
+            // get avoidance adjusted climb rate
+            target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
+
+            #if AP_RANGEFINDER_ENABLED
+            // update the vertical offset based on the surface measurement
+            copter.surface_tracking.update_surface_offset();
+            #endif
+
+            // Send the commanded climb rate to the position controller
+            pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
+            break;
         }
-#else  
-        loiter_nav->update();
-#endif
-        // attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
-        // attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), auto_yaw.get_heading());
-
-        // // call attitude controller
-        // AC_AttitudeControl::HeadingCommand heading_command;
-        // heading_command.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
-        // //TODO Update Heading Command only when we have new data from lidar
-        // heading_command.yaw_angle_cd = wrap_360(target_yaw_angle_deg+heading)*100.0f; // Compute absolute heading target
-        // // attitude_control->input_thrust_vector_heading(loiter_nav->get_thrust_vector(), heading_command);
-
-        if (millis() - auto_yaw.get_last_update_ms() > 200 || auto_yaw.reached_fixed_yaw_target()) {
-            target_yaw_angle_deg = wrap_180(target_yaw_angle_deg);
-            int8_t direction = (target_yaw_angle_deg >= 0 ? 1.0 : -1.0);
-            auto_yaw.set_fixed_yaw(abs(target_yaw_angle_deg), 0.0f, direction, true);
-            ::fprintf(stderr,"Target hdg: %.2f, Direction: %i\n",target_yaw_angle_deg, direction);
-        }
-        
-
-        attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), auto_yaw.get_heading());
-
-        // get avoidance adjusted climb rate
-        target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
-
-#if AP_RANGEFINDER_ENABLED
-        // update the vertical offset based on the surface measurement
-        copter.surface_tracking.update_surface_offset();
-#endif
-
-        // Send the commanded climb rate to the position controller
-        pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
-        break;
     }
-
     // run the vertical position controller and set output throttle
     pos_control->update_z_controller();
 }
