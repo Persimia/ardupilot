@@ -9,8 +9,7 @@
 // loiter_init - initialise loiter controller
 bool ModeLoiterAssisted::init(bool ignore_checks)
 {
-    printf("Papa can you hear me?");
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "GCS: Papa can you hear me?");
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Mode set to Loiter Assisted");
     if (!copter.failsafe.radio) {
         float target_roll, target_pitch;
         // apply SIMPLE mode transform to pilot inputs
