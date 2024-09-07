@@ -1688,7 +1688,11 @@ protected:
 #endif
 
 private:
-
+    uint32_t last_update_ms;
+    float sin_yaw_obst;
+    float cos_yaw_obst;
+    double distance_target;
+    bool target_acquired;
 #if AC_PRECLAND_ENABLED
     bool _precision_loiter_enabled;
     bool _precision_loiter_active; // true if user has switched on prec loiter

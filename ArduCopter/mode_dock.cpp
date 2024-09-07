@@ -34,6 +34,16 @@ bool ModeDock::init(bool ignore_checks)
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
     pos_control->set_correction_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
 
+    // last_update of lidar data
+    last_update_ms = millis();
+
+    // Obstacle Heading Vector
+    sin_yaw_obst = sinf(ahrs.get_yaw());
+    cos_yaw_obst = cosf(ahrs.get_yaw());
+
+    target_acquired = false;
+    distance_target = 3.0;
+
 #if AC_PRECLAND_ENABLED
     _precision_loiter_active = false;
 #endif
@@ -87,12 +97,13 @@ void ModeDock::run()
     float target_yaw_rate = 0.0f;
     float target_climb_rate = 0.0f;
 
-    // Get Yaw angle and distabce to closest object from AP_Proximity
+/* Get Yaw angle and distance to closest object from AP_Proximity
     float target_yaw_angle;
     float separation;
     g2.proximity.get_closest_object(target_yaw_angle,separation);
     // Get Vehicle Heading
-    float heading = ahrs.get_yaw()*RAD_TO_DEG;
+    float heading = ahrs.get_yaw()*RAD_TO_DEG; */
+    
 
     // set vertical speed and acceleration limits
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
@@ -100,7 +111,7 @@ void ModeDock::run()
     // process pilot inputs unless we are in radio failsafe
     if (!copter.failsafe.radio) {
         // apply SIMPLE mode transform to pilot inputs
-        update_simple_mode();
+        //update_simple_mode(); //Disable simple mode
 
         // convert pilot input to lean angles
         get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
@@ -136,6 +147,7 @@ void ModeDock::run()
         pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
         loiter_nav->init_target();
         attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
+        target_acquired = false;
         break;
 
     case AltHoldModeState::Landed_Ground_Idle:
@@ -147,6 +159,7 @@ void ModeDock::run()
         loiter_nav->init_target();
         attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
         pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
+        target_acquired = false;
         break;
 
     case AltHoldModeState::Takeoff:
@@ -166,38 +179,115 @@ void ModeDock::run()
 
         // call attitude controller
         attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
+        target_acquired = false;
         break;
 
     case AltHoldModeState::Flying:
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        AC_AttitudeControl::HeadingCommand heading_cmd;
+        // Get Yaw angle and distance to closest object from AP_Proximity
+        float yaw_to_obst_deg;
+        float dist_to_obst_m;
+        Vector3f thrust_vector;
+
+        if(g2.proximity.get_closest_object(yaw_to_obst_deg, dist_to_obst_m)){
+            // YAW CONTROLLER //
+            /*Update the heading controller at a low rate (this is because the auto yaw controller uses
+            a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/ 
+            uint32_t cur_time_ms = millis();
+            if (cur_time_ms - last_update_ms > 200 || auto_yaw.reached_fixed_yaw_target()) {
+                last_update_ms = cur_time_ms;
+                yaw_to_obst_deg = wrap_180(yaw_to_obst_deg);
+                int8_t direction = (yaw_to_obst_deg >= 0 ? 1.0 : -1.0);
+                auto_yaw.set_fixed_yaw(abs(yaw_to_obst_deg), 0.0f, direction, true);
+
+                //GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "X:%f Y:%f Z: %f", targ[0], targ[1], targ[2]);
+
+                float heading_obst = ahrs.get_yaw() + yaw_to_obst_deg*DEG_TO_RAD;
+                sin_yaw_obst = sinf(heading_obst);
+                cos_yaw_obst = cosf(heading_obst);
+                
+                
+            }
+             heading_cmd = auto_yaw.get_heading();
+            // END YAW CONTROLLER //
+
+            // POSITION CONTROLLER //
+            float vel_fw = -0.1f * target_pitch; //Forward Velocity Command
+            float vel_rt =  0.1f * target_roll; //Right Velocity Command
+
+            if(!target_acquired){// Reacquired target so reset distance
+                distance_target = dist_to_obst_m * 100.0;
+                target_acquired=true;
+                GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Target Acquired");
+            }
+            else{
+                distance_target -= vel_fw*pos_control->get_dt();
+            }
+
+
+            double distance_err = dist_to_obst_m * 100.0 - distance_target;
+
+
+            Vector2p dist_correction(
+                distance_err*cos_yaw_obst,
+                distance_err*sin_yaw_obst
+            );
+
+            Vector2p target_pos(
+                pos_control->get_pos_target_cm()[0],
+                pos_control->get_pos_target_cm()[1]
+            );
+            target_pos = target_pos + dist_correction;
+
+            Vector2f target_vel(
+                -vel_rt*sin_yaw_obst,
+                vel_rt*cos_yaw_obst
+            );
+
+            Vector2f zero;
+
+            // 
+            pos_control->input_pos_vel_accel_xy(target_pos, target_vel, zero);
+            // run pos controller
+            pos_control->update_xy_controller();
+            thrust_vector = pos_control->get_thrust_vector();
+            // END POSITION CONTROL //
+
+        }else{
+            heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Rate_Only;
+            heading_cmd.yaw_rate_cds = target_yaw_rate;
+            target_acquired = false;
+            GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Target Lost");
+            
+        
+
 
 #if AC_PRECLAND_ENABLED
-        bool precision_loiter_old_state = _precision_loiter_active;
-        if (do_precision_loiter()) {
-            precision_loiter_xy();
-            _precision_loiter_active = true;
-        } else {
-            _precision_loiter_active = false;
-        }
-        if (precision_loiter_old_state && !_precision_loiter_active) {
-            // prec loiter was active, not any more, let's init again as user takes control
-            loiter_nav->init_target();
-        }
-        // run loiter controller if we are not doing prec loiter
-        if (!_precision_loiter_active) {
-            loiter_nav->update(false); // false => don't run obstacle avoidance
-        }
+            bool precision_loiter_old_state = _precision_loiter_active;
+            if (do_precision_loiter()) {
+                precision_loiter_xy();
+                _precision_loiter_active = true;
+            } else {
+                _precision_loiter_active = false;
+            }
+            if (precision_loiter_old_state && !_precision_loiter_active) {
+                // prec loiter was active, not any more, let's init again as user takes control
+                loiter_nav->init_target();
+            }
+            // run loiter controller if we are not doing prec loiter
+            if (!_precision_loiter_active) {
+                loiter_nav->update(false); // false => don't run obstacle avoidance
+            }
 #else
-        loiter_nav->update(false); // false => don't run obstacle avoidance
+            loiter_nav->update(false); // false => don't run obstacle avoidance
 #endif
-        
+
+            thrust_vector = loiter_nav->get_thrust_vector();
+        }
         // call attitude controller
-        AC_AttitudeControl::HeadingCommand heading_command;
-        heading_command.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
-        //TODO Update Heading Command only when we have new data from lidar
-        heading_command.yaw_angle_cd = wrap_360(target_yaw_angle+heading)*100.0f; // Compute absolute heading target
-        attitude_control->input_thrust_vector_heading(loiter_nav->get_thrust_vector(), heading_command);
+        attitude_control->input_thrust_vector_heading(thrust_vector, heading_cmd);
 
         // get avoidance adjusted climb rate
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
