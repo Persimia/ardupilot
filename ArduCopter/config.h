@@ -197,6 +197,12 @@
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
+// Assisted Loiter mode - allows vehicle to hold global position with yaw inputs from computer
+#ifndef MODE_DOCK_ENABLED
+# define MODE_DOCK_ENABLED ENABLED
+#endif
+
+//////////////////////////////////////////////////////////////////////////////
 // Position Hold - enable holding of global position
 #ifndef MODE_POSHOLD_ENABLED
 # define MODE_POSHOLD_ENABLED ENABLED
@@ -242,6 +248,12 @@
 // Turtle - allow vehicle to be flipped over after a crash
 #ifndef MODE_TURTLE_ENABLED
 # define MODE_TURTLE_ENABLED HAL_DSHOT_ENABLED && FRAME_CONFIG != HELI_FRAME
+#endif
+
+//////////////////////////////////////////////////////////////////////////////
+// Dock - Vehicle yaws to point at surface
+#ifndef MODE_DOCK_ENABLED
+# define MODE_DOCK_ENABLED ENABLED
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
