@@ -338,6 +338,7 @@ public:
 #endif
 
         AC_AttitudeControl::HeadingCommand get_heading();
+        uint32_t get_last_update_ms() const {return _last_update_ms;}
 
     private:
 

@@ -47,6 +47,8 @@ sensor_msgs_msg_Joy AP_DDS_Client::rx_joy_topic {};
 tf2_msgs_msg_TFMessage AP_DDS_Client::rx_dynamic_transforms_topic {};
 geometry_msgs_msg_TwistStamped AP_DDS_Client::rx_velocity_control_topic {};
 ardupilot_msgs_msg_GlobalPosition AP_DDS_Client::rx_global_position_control_topic {};
+sensor_msgs_msg_LaserScan AP_DDS_Client::rx_laser_scan_topic {};
+bool AP_DDS_Client::rx_laser_scan_used = false;
 
 
 const AP_Param::GroupInfo AP_DDS_Client::var_info[] {
@@ -605,6 +607,21 @@ void AP_DDS_Client::on_topic(uxrSession* uxr_session, uxrObjectId object_id, uin
 #endif // AP_EXTERNAL_CONTROL_ENABLED
         break;
     }
+    case topics[to_underlying(TopicIndex::LASER_SCAN_SUB)].dr_id.id: {
+        const bool success = sensor_msgs_msg_LaserScan_deserialize_topic(ub, &rx_laser_scan_topic);
+
+        if (success == false) {
+            GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "/LaserScan Failed to deserialize!");
+            break;
+        }
+
+        if (success) {
+            // GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "%s Received sensor_msgs/LaserScan: %f",
+            //               msg_prefix, rx_laser_scan_topic.ranges[0]);
+            AP_DDS_Client::rx_laser_scan_used = false;
+        }
+        break;
+    }
     }
 
 }
@@ -1069,8 +1086,10 @@ void AP_DDS_Client::write_geo_pose_topic()
         const bool success = geographic_msgs_msg_GeoPoseStamped_serialize_topic(&ub, &geo_pose_topic);
         if (!success) {
             // TODO sometimes serialization fails on bootup. Determine why.
-            // AP_HAL::panic("FATAL: DDS_Client failed to serialize\n");
+            AP_HAL::panic("FATAL: DDS_Client failed to serialize\n");
         }
+    } else {
+        AP_HAL::panic("FATAL: DDS_Client not connected!\n");
     }
 }
 

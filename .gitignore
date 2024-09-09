@@ -172,5 +172,10 @@ env.bak/
 venv.bak/
 autotest_result_*_junit.xml
 
+
 #ignore vehicles
 /vehicles/*
+
+*/.vscode
+.vscode/*
+
