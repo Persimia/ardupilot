@@ -1329,6 +1329,11 @@ protected:
 #endif
 
 private:
+    uint32_t last_update_ms;
+    float sin_yaw_obs;
+    float cos_yaw_obs;
+    float distance_target_cm;
+    bool target_acquired;
 
 #if AC_PRECLAND_ENABLED
     bool _precision_loiter_enabled;
