@@ -1292,6 +1292,7 @@ private:
 class ModeLoiterAssisted : public Mode {
 
 public:
+    ModeLoiterAssisted(void);
     // inherit constructor
     using Mode::Mode;
     Number mode_number() const override { return Number::LOITER_ASSISTED; }
@@ -1305,6 +1306,8 @@ public:
     bool is_autopilot() const override { return false; }
     bool has_user_takeoff(bool must_navigate) const override { return true; }
     bool allows_autotune() const override { return true; }
+
+    static const struct AP_Param::GroupInfo var_info[];
 
 #if FRAME_CONFIG == HELI_FRAME
     bool allows_inverted() const override { return true; };
@@ -1329,11 +1332,16 @@ protected:
 #endif
 
 private:
-    uint32_t last_update_ms;
-    float sin_yaw_obs;
-    float cos_yaw_obs;
-    float distance_target_cm;
-    bool target_acquired;
+    float _sin_yaw_obs;
+    float _cos_yaw_obs;
+    float _distance_target_cm;
+    bool _target_acquired;
+
+    // Define parameters
+    AP_Float _pitch_to_fw_vel_gain;
+    AP_Float _roll_to_rt_vel_gain;
+    AP_Float _min_obs_dist_cm;
+
 
 #if AC_PRECLAND_ENABLED
     bool _precision_loiter_enabled;

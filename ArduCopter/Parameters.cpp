@@ -1232,6 +1232,10 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @User: Advanced
     AP_GROUPINFO("FS_EKF_FILT", 8, ParametersG2, fs_ekf_filt_hz, FS_EKF_FILT_DEFAULT),
 
+    // @Group: LASS_
+    // @Path: mode_loiter_assisted.cpp
+    AP_SUBGROUPPTR(mode_loiter_assisted_ptr, "LASS_", 9, ParametersG2, ModeLoiterAssisted),
+
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 
     AP_GROUPEND
@@ -1293,6 +1297,7 @@ ParametersG2::ParametersG2(void)
 #if WEATHERVANE_ENABLED == ENABLED
     ,weathervane()
 #endif
+    ,mode_loiter_assisted_ptr(&copter.mode_loiter_assisted)
 {
     AP_Param::setup_object_defaults(this, var_info);
     AP_Param::setup_object_defaults(this, var_info2);
