@@ -6,6 +6,42 @@
  * Init and run calls for loiter flight mode
  */
 
+#define PITCH_TO_FW_VEL_GAIN_DEFAULT         0.1
+#define ROLL_TO_RT_VEL_GAIN_DEFAULT          0.1
+#define MIN_OBS_DIST_CM_DEFAULT              150
+
+const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
+    // @Param: P_2_FW_VEL
+    // @DisplayName: Pitch to perpendicular vel
+    // @Description: Gain from pitch angle to perpendicular velocity
+    // @Range: 0 2
+    // @User: Advanced
+    AP_GROUPINFO("P_2_FW_VEL", 1, ModeLoiterAssisted, _pitch_to_fw_vel_gain, PITCH_TO_FW_VEL_GAIN_DEFAULT),
+
+    // @Param: R_2_RT_VEL
+    // @DisplayName: Roll to lateral vel
+    // @Description: Gain from roll angle to lateral velocity
+    // @Range: 0 2
+    // @User: Advanced
+    AP_GROUPINFO("R_2_RT_VEL", 2, ModeLoiterAssisted, _roll_to_rt_vel_gain, ROLL_TO_RT_VEL_GAIN_DEFAULT),
+
+    // @Param: MIN_DIST
+    // @DisplayName: Minimum dist to obstacle
+    // @Description: Minimum distance that you can get to the obstacle
+    // @Units: cm
+    // @Range: 0 5000
+    // @User: Advanced
+    AP_GROUPINFO("MIN_DIST", 3, ModeLoiterAssisted, _min_obs_dist_cm, MIN_OBS_DIST_CM_DEFAULT),
+
+    AP_GROUPEND
+};
+
+ModeLoiterAssisted::ModeLoiterAssisted(void) : Mode()
+{
+    AP_Param::setup_object_defaults(this, var_info);
+}
+
+
 // loiter_init - initialise loiter controller
 bool ModeLoiterAssisted::init(bool ignore_checks)
 {
@@ -34,6 +70,15 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     // set vertical speed and acceleration limits
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
     pos_control->set_correction_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
+
+    // Obstacle Heading Vector
+    _sin_yaw_obs = sinf(ahrs.get_yaw());
+    _cos_yaw_obs = cosf(ahrs.get_yaw());
+
+    _target_acquired = false;
+    _distance_target_cm = 300.0f;
+
+    copter.set_simple_mode(Copter::SimpleMode::NONE); // disable simple mode for this mode. TODO: Validate
 
 #if AC_PRECLAND_ENABLED
     _precision_loiter_active = false;
@@ -96,7 +141,7 @@ void ModeLoiterAssisted::run()
     // process pilot inputs unless we are in radio failsafe
     if (!copter.failsafe.radio) {
         // apply SIMPLE mode transform to pilot inputs
-        update_simple_mode();
+        // update_simple_mode(); //Disable simple mode
 
         // convert pilot input to lean angles
         get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
@@ -132,6 +177,7 @@ void ModeLoiterAssisted::run()
         pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
         loiter_nav->init_target();
         attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
+        _target_acquired = false;
         break;
 
     case AltHoldModeState::Landed_Ground_Idle:
@@ -143,6 +189,7 @@ void ModeLoiterAssisted::run()
         loiter_nav->init_target();
         attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
         pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
+        _target_acquired = false;
         break;
 
     case AltHoldModeState::Takeoff:
@@ -150,37 +197,29 @@ void ModeLoiterAssisted::run()
         if (!takeoff.running()) {
             takeoff.start(constrain_float(g.pilot_takeoff_alt,0.0f,1000.0f));
         }
-
         // get avoidance adjusted climb rate
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
-
         // set position controller targets adjusted for pilot input
         takeoff.do_pilot_takeoff(target_climb_rate);
-
         // run loiter controller
         loiter_nav->update();
-
         // call attitude controller
         attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
+        _target_acquired = false;
         break;
 
     case AltHoldModeState::Flying:
-        // Get Yaw angle and distance to closest object from AP_Proximity
-        float yaw_to_obs_deg; // yaw angle is measured in the local frame
-        float dist_to_obs_m;
-        bool success = g2.proximity.get_closest_object(yaw_to_obs_deg, dist_to_obs_m);
-
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-        if (success) {
-            copter.set_simple_mode(Copter::SimpleMode::NONE); // disable simple mode for this mode. TODO: Validate
-            // convert pilot input to lean angles
-            get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
+        // Get Yaw angle and distance to closest object from AP_Proximity
+        float yaw_to_obs_deg; // yaw angle is measured in the local frame
+        float dist_to_obs_m;
 
-            // process pilot's roll and pitch input in the frame defined by the obstacle!
-            loiter_nav->set_pilot_desired_acceleration(target_roll, target_pitch, yaw_to_obs_deg);
-            loiter_nav->update(false); // Pass false here to avoid using obstacle avoidance
+        if (g2.proximity.get_closest_object(yaw_to_obs_deg, dist_to_obs_m)) {
+            float heading_obs_rad = ahrs.get_yaw() + yaw_to_obs_deg*DEG_TO_RAD;
+            _sin_yaw_obs = sinf(heading_obs_rad);
+            _cos_yaw_obs = cosf(heading_obs_rad);
 
             // YAW CONTROLLER //
             /*Update the heading controller at a low rate (this is because the auto yaw controller uses
@@ -191,6 +230,43 @@ void ModeLoiterAssisted::run()
                 auto_yaw.set_fixed_yaw(abs(yaw_to_obs_deg), 0.0f, direction, true);
             }
             // END YAW CONTROLLER //
+
+            // POSITION CONTROLLER //
+            float vel_fw = -_pitch_to_fw_vel_gain * target_pitch; //Forward Velocity Command TODO: Make this a parameter gain!
+            float vel_rt =  _roll_to_rt_vel_gain * target_roll; //Right Velocity Command 
+            if(!_target_acquired){// Reacquired target so reset distance
+                _distance_target_cm = dist_to_obs_m * 100.0;
+                _target_acquired = true;
+            }
+            else{
+                _distance_target_cm -= vel_fw*pos_control->get_dt();
+            }
+
+            // Min dist check
+            if (_distance_target_cm < _min_obs_dist_cm) {
+                _distance_target_cm = _min_obs_dist_cm;
+            }
+
+            float distance_err_cm = dist_to_obs_m * 100.0 - _distance_target_cm;
+            Vector2p dist_correction(
+                distance_err_cm*_cos_yaw_obs,
+                distance_err_cm*_sin_yaw_obs
+            );
+            Vector2p target_pos = pos_control->get_pos_target_cm().xy();
+            target_pos += dist_correction;
+            Vector2f target_vel(
+                -vel_rt*_sin_yaw_obs,
+                vel_rt*_cos_yaw_obs
+            );
+            Vector2f zero;
+
+            pos_control->input_pos_vel_accel_xy(target_pos, target_vel, zero); // input pos and vel targets
+            pos_control->update_xy_controller(); // run pos controller
+
+            ::fprintf(stderr, "dtcm: %.0f, decm: %.1f, tp: %.0f, %.0f, dc: %.0f, %.0f\n",
+            _distance_target_cm, distance_err_cm, target_pos[0], target_pos[1],
+            dist_correction[0], dist_correction[1]);
+            // END POSITION CONTROL //
             
             // AUGMENT CONTROL //
             attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), auto_yaw.get_heading());
@@ -205,6 +281,7 @@ void ModeLoiterAssisted::run()
             // END AUGMENT CONTROL //
 
         } else { //default to normal loiter when no obstacles are detected
+            _target_acquired = false; // no target found
             #if AC_PRECLAND_ENABLED
             bool precision_loiter_old_state = _precision_loiter_active;
             if (do_precision_loiter()) {
