@@ -1,4 +1,5 @@
 #include "Copter.h"
+#include <AP_DDS/AP_DDS_Client.h>
 
 #if MODE_LOITER_ASSISTED_ENABLED == ENABLED
 
@@ -88,6 +89,39 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
 
     return true;
 }
+
+bool ModeLoiterAssisted::attach() {
+    if (attach_armed) {
+        return true;
+    }
+    // AP_DDS publish attach message... should change to state setup?
+    AP_DDS_Client::need_to_pub_attach_detach = true;
+    AP_DDS_Client::desire_attach = true;
+    // Disable min distance
+    _min_dist_enabled = false;
+    
+    attach_armed = true;
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Attach primed");
+    return true;
+}
+bool ModeLoiterAssisted::detach() {
+    if (!attach_armed) {
+        return true;
+    }
+    // AP_DDS publish detach message
+    AP_DDS_Client::need_to_pub_attach_detach = true;
+    AP_DDS_Client::desire_attach = false;
+    // Enable min distance 
+    _min_dist_enabled = true;
+
+    // Set target far away
+    _distance_target_cm = _min_obs_dist_cm;
+
+    attach_armed = false;
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Detach primed");
+    return true;
+}
+
 
 #if AC_PRECLAND_ENABLED
 bool ModeLoiterAssisted::do_precision_loiter()
@@ -243,9 +277,12 @@ void ModeLoiterAssisted::run()
             }
 
             // Min dist check
-            if (_distance_target_cm < _min_obs_dist_cm) {
-                _distance_target_cm = _min_obs_dist_cm;
+            if (_min_dist_enabled) {
+                if (_distance_target_cm < _min_obs_dist_cm) {
+                    _distance_target_cm = _min_obs_dist_cm;
+                }
             }
+            
 
             float distance_err_cm = dist_to_obs_m * 100.0 - _distance_target_cm;
             Vector2p dist_correction(
@@ -263,9 +300,9 @@ void ModeLoiterAssisted::run()
             pos_control->input_pos_vel_accel_xy(target_pos, target_vel, zero); // input pos and vel targets
             pos_control->update_xy_controller(); // run pos controller
 
-            ::fprintf(stderr, "dtcm: %.0f, decm: %.1f, tp: %.0f, %.0f, dc: %.0f, %.0f\n",
-            _distance_target_cm, distance_err_cm, target_pos[0], target_pos[1],
-            dist_correction[0], dist_correction[1]);
+            // ::fprintf(stderr, "dtcm: %.0f, decm: %.1f, tp: %.0f, %.0f, dc: %.0f, %.0f\n",
+            // _distance_target_cm, distance_err_cm, target_pos[0], target_pos[1],
+            // dist_correction[0], dist_correction[1]);
             // END POSITION CONTROL //
             
             // AUGMENT CONTROL //

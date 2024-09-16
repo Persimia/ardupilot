@@ -1307,6 +1307,9 @@ public:
     bool has_user_takeoff(bool must_navigate) const override { return true; }
     bool allows_autotune() const override { return true; }
 
+    bool attach();
+    bool detach();
+
     static const struct AP_Param::GroupInfo var_info[];
 
 #if FRAME_CONFIG == HELI_FRAME
@@ -1336,6 +1339,9 @@ private:
     float _cos_yaw_obs;
     float _distance_target_cm;
     bool _target_acquired;
+
+    bool attach_armed {false};
+    bool _min_dist_enabled {true};
 
     // Define parameters
     AP_Float _pitch_to_fw_vel_gain;

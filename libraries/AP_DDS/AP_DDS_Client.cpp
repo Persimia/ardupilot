@@ -48,6 +48,8 @@ tf2_msgs_msg_TFMessage AP_DDS_Client::rx_dynamic_transforms_topic {};
 geometry_msgs_msg_TwistStamped AP_DDS_Client::rx_velocity_control_topic {};
 ardupilot_msgs_msg_GlobalPosition AP_DDS_Client::rx_global_position_control_topic {};
 sensor_msgs_msg_LaserScan AP_DDS_Client::rx_laser_scan_topic {};
+bool AP_DDS_Client::need_to_pub_attach_detach = false;
+bool AP_DDS_Client::desire_attach = false;
 bool AP_DDS_Client::rx_laser_scan_used = false;
 
 
@@ -1093,6 +1095,40 @@ void AP_DDS_Client::write_geo_pose_topic()
     }
 }
 
+void AP_DDS_Client::write_attach_topic()
+{
+    WITH_SEMAPHORE(csem);
+    if (connected) {
+        ucdrBuffer ub {};
+        const uint32_t topic_size = std_msgs_msg_Empty_size_of_topic(&empty_msg, 0);
+        uxr_prepare_output_stream(&session, reliable_out, topics[to_underlying(TopicIndex::ATTACH_PUB)].dw_id, &ub, topic_size);
+        const bool success = std_msgs_msg_Empty_serialize_topic(&ub, &empty_msg);
+        if (!success) {
+            // TODO sometimes serialization fails on bootup. Determine why.
+            AP_HAL::panic("FATAL: DDS_Client failed to serialize\n");
+        }
+    } else {
+        AP_HAL::panic("FATAL: DDS_Client not connected!\n");
+    }
+}
+
+void AP_DDS_Client::write_detach_topic()
+{
+    WITH_SEMAPHORE(csem);
+    if (connected) {
+        ucdrBuffer ub {};
+        const uint32_t topic_size = std_msgs_msg_Empty_size_of_topic(&empty_msg, 0);
+        uxr_prepare_output_stream(&session, reliable_out, topics[to_underlying(TopicIndex::DETACH_PUB)].dw_id, &ub, topic_size);
+        const bool success = std_msgs_msg_Empty_serialize_topic(&ub, &empty_msg);
+        if (!success) {
+            // TODO sometimes serialization fails on bootup. Determine why.
+            AP_HAL::panic("FATAL: DDS_Client failed to serialize\n");
+        }
+    } else {
+        AP_HAL::panic("FATAL: DDS_Client not connected!\n");
+    }
+}
+
 void AP_DDS_Client::write_clock_topic()
 {
     WITH_SEMAPHORE(csem);
@@ -1179,6 +1215,15 @@ void AP_DDS_Client::update()
         update_topic(gps_global_origin_topic);
         last_gps_global_origin_time_ms = cur_time_ms;
         write_gps_global_origin_topic();
+    }
+
+    if (AP_DDS_Client::need_to_pub_attach_detach) {
+        if (AP_DDS_Client::desire_attach) {
+            write_attach_topic();
+        }else{
+            write_detach_topic();
+        }
+        AP_DDS_Client::need_to_pub_attach_detach = false;
     }
 
     status_ok = uxr_run_session_time(&session, 1);

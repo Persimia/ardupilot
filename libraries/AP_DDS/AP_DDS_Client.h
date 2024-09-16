@@ -21,6 +21,7 @@
 #include "geographic_msgs/msg/GeoPoseStamped.h"
 #include "rosgraph_msgs/msg/Clock.h"
 #include "sensor_msgs/msg/LaserScan.h"
+#include "std_msgs/msg/Empty.h"
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/Scheduler.h>
@@ -81,6 +82,7 @@ private:
     static tf2_msgs_msg_TFMessage rx_dynamic_transforms_topic;
     // incoming 360 lidar data
     static sensor_msgs_msg_LaserScan rx_laser_scan_topic;
+    std_msgs_msg_Empty empty_msg;
 
     HAL_Semaphore csem;
 
@@ -209,6 +211,10 @@ public:
     void write_gps_global_origin_topic();
     //! @brief Update the internally stored DDS messages with latest data
     void update();
+    //! @brief Publish attach topic message
+    void write_attach_topic();
+    //! @brief Publish detach topic message
+    void write_detach_topic();
 
     //! @brief GCS message prefix
     static constexpr const char* msg_prefix = "DDS:";
@@ -280,6 +286,10 @@ public:
         return &rx_laser_scan_topic;
     };
     static bool rx_laser_scan_used;
+
+    static bool need_to_pub_attach_detach;
+    static bool desire_attach;
+
 };
 
 #endif // AP_DDS_ENABLED
