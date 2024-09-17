@@ -14,7 +14,7 @@ bool ModeDock::init(bool ignore_checks)
         // apply SIMPLE mode transform to pilot inputs
         update_simple_mode();
 
-        // convert pilot input to lean angles
+        // convert pilot input to lean angles TODO change to get_pilot_desired_vel()
         get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
 
         // process pilot's roll and pitch input
@@ -44,50 +44,8 @@ bool ModeDock::init(bool ignore_checks)
     target_acquired = false;
     distance_target = 3.0;
 
-#if AC_PRECLAND_ENABLED
-    _precision_loiter_active = false;
-#endif
-
     return true;
 }
-
-#if AC_PRECLAND_ENABLED
-bool ModeDock::do_precision_loiter()
-{
-    if (!_precision_loiter_enabled) {
-        return false;
-    }
-    if (copter.ap.land_complete_maybe) {
-        return false;        // don't move on the ground
-    }
-    // if the pilot *really* wants to move the vehicle, let them....
-    if (loiter_nav->get_pilot_desired_acceleration().length() > 50.0f) {
-        return false;
-    }
-    if (!copter.precland.target_acquired()) {
-        return false; // we don't have a good vector
-    }
-    return true;
-}
-
-void ModeDock::precision_loiter_xy()
-{
-    loiter_nav->clear_pilot_desired_acceleration();
-    Vector2f target_pos, target_vel;
-    if (!copter.precland.get_target_position_cm(target_pos)) {
-        target_pos = inertial_nav.get_position_xy_cm();
-    }
-    // get the velocity of the target
-    copter.precland.get_target_velocity_cms(inertial_nav.get_velocity_xy_cms(), target_vel);
-
-    Vector2f zero;
-    Vector2p landing_pos = target_pos.topostype();
-    // target vel will remain zero if landing target is stationary
-    pos_control->input_pos_vel_accel_xy(landing_pos, target_vel, zero);
-    // run pos controller
-    pos_control->update_xy_controller();
-}
-#endif
 
 // loiter_run - runs the loiter controller
 // should be called at 100hz or more
@@ -113,7 +71,7 @@ void ModeDock::run()
         // apply SIMPLE mode transform to pilot inputs
         //update_simple_mode(); //Disable simple mode
 
-        // convert pilot input to lean angles
+        // convert pilot input to lean angles TODO: change to get_pilot_desired_vel()
         get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
 
         // process pilot's roll and pitch input
@@ -260,29 +218,9 @@ void ModeDock::run()
             heading_cmd.yaw_rate_cds = target_yaw_rate;
             target_acquired = false;
             GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Target Lost");
-            
-        
 
-
-#if AC_PRECLAND_ENABLED
-            bool precision_loiter_old_state = _precision_loiter_active;
-            if (do_precision_loiter()) {
-                precision_loiter_xy();
-                _precision_loiter_active = true;
-            } else {
-                _precision_loiter_active = false;
-            }
-            if (precision_loiter_old_state && !_precision_loiter_active) {
-                // prec loiter was active, not any more, let's init again as user takes control
-                loiter_nav->init_target();
-            }
-            // run loiter controller if we are not doing prec loiter
-            if (!_precision_loiter_active) {
-                loiter_nav->update(false); // false => don't run obstacle avoidance
-            }
-#else
             loiter_nav->update(false); // false => don't run obstacle avoidance
-#endif
+
 
             thrust_vector = loiter_nav->get_thrust_vector();
         }
