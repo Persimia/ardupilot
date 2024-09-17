@@ -1357,6 +1357,13 @@ private:
     AP_Float _pitch_to_fw_vel_gain;
     AP_Float _roll_to_rt_vel_gain;
     AP_Float _min_obs_dist_cm;
+    AP_Float _yaw_alpha;
+    AP_Float _yaw_dz;
+
+    float _filt_yaw_cmd_deg;
+    uint32_t _last_yaw_update_ms;
+
+    float _last_heading_cmd_deg;
 
 
 #if AC_PRECLAND_ENABLED

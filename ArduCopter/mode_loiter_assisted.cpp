@@ -10,6 +10,8 @@
 #define PITCH_TO_FW_VEL_GAIN_DEFAULT         0.1
 #define ROLL_TO_RT_VEL_GAIN_DEFAULT          0.1
 #define MIN_OBS_DIST_CM_DEFAULT              200
+#define YAW_ALPHA_DEFAULT                    0.2
+#define YAW_DEADZONE_DEFAULT                 2.0
 
 #define DOCK_TARGET_DIST_CM                  0.0
 
@@ -35,6 +37,21 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Range: 0 5000
     // @User: Advanced
     AP_GROUPINFO("MIN_DIST", 3, ModeLoiterAssisted, _min_obs_dist_cm, MIN_OBS_DIST_CM_DEFAULT),
+
+    // @Param: YAW_ALPHA
+    // @DisplayName: Yaw LPF alpha
+    // @Description: This is the alpha for lpf on yaw [x*a + y*(a-1)]
+    // @Range: 0 1
+    // @User: Advanced
+    AP_GROUPINFO("YAW_ALPHA", 4, ModeLoiterAssisted, _yaw_alpha, YAW_ALPHA_DEFAULT),
+
+    // @Param: YAW_DZ
+    // @DisplayName: Yaw controller deadzone
+    // @Description: Deadzone in degrees where the yaw controller won't update
+    // @Units: deg
+    // @Range: 0 180
+    // @User: Advanced
+    AP_GROUPINFO("YAW_DZ", 5, ModeLoiterAssisted, _yaw_dz, YAW_DEADZONE_DEFAULT),
 
     AP_GROUPEND
 };
@@ -264,30 +281,37 @@ void ModeLoiterAssisted::run()
         float dist_to_obs_m;
 
         if (g2.proximity.get_closest_object(yaw_to_obs_deg, dist_to_obs_m)) {
+            yaw_to_obs_deg = wrap_180(yaw_to_obs_deg);
             float heading_obs_rad = ahrs.get_yaw() + yaw_to_obs_deg*DEG_TO_RAD;
             _sin_yaw_obs = sinf(heading_obs_rad);
             _cos_yaw_obs = cosf(heading_obs_rad);
 
+            if(!_target_acquired){// Reacquired target so reset yaw. TODO manage this state better
+                _distance_target_cm = dist_to_obs_m * 100.0;
+                _filt_yaw_cmd_deg = yaw_to_obs_deg;
+                _target_acquired = true; //TODO control this more clearly
+            }
+
+
+            
             // YAW CONTROLLER //
             /*Update the heading controller at a low rate (this is because the auto yaw controller uses
-            a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/ 
-            if (millis() - auto_yaw.get_last_update_ms() > 200 || auto_yaw.reached_fixed_yaw_target()) {
-                yaw_to_obs_deg = wrap_180(yaw_to_obs_deg);
-                int8_t direction = (yaw_to_obs_deg >= 0 ? 1.0 : -1.0);
-                auto_yaw.set_fixed_yaw(abs(yaw_to_obs_deg), 0.0f, direction, true);
+            a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/
+            _filt_yaw_cmd_deg = (_yaw_alpha)*yaw_to_obs_deg + (1.0f-_yaw_alpha)*_filt_yaw_cmd_deg; 
+            bool dz_exceeded = abs(_filt_yaw_cmd_deg - _last_heading_cmd_deg) > _yaw_dz;
+            if ((millis() - _last_yaw_update_ms > 200) && dz_exceeded) { // || auto_yaw.reached_fixed_yaw_target()
+                int8_t direction = (_filt_yaw_cmd_deg >= 0 ? 1.0 : -1.0);
+                auto_yaw.set_fixed_yaw(abs(_filt_yaw_cmd_deg), 0.0f, direction, true);
+                _last_heading_cmd_deg = _filt_yaw_cmd_deg;
+                _last_yaw_update_ms = millis();
+                ::fprintf(stderr,"_yaw_alpha: %.2f\trelative yaw: %.2f\tobs heading: %.2f\n",float(_yaw_alpha),yaw_to_obs_deg,_filt_yaw_cmd_deg);
             }
             // END YAW CONTROLLER //
 
             // POSITION CONTROLLER //
             float vel_fw = -_pitch_to_fw_vel_gain * target_pitch; //Forward Velocity Command TODO: Make this a parameter gain!
             float vel_rt =  _roll_to_rt_vel_gain * target_roll; //Right Velocity Command 
-            if(!_target_acquired){// Reacquired target so reset distance
-                _distance_target_cm = dist_to_obs_m * 100.0;
-                _target_acquired = true;
-            }
-            else{
-                _distance_target_cm -= vel_fw*pos_control->get_dt();
-            }
+            _distance_target_cm -= vel_fw*pos_control->get_dt();
 
             // Docking state controller
             switch (_docking_state){
