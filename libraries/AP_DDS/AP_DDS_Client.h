@@ -22,6 +22,7 @@
 #include "rosgraph_msgs/msg/Clock.h"
 #include "sensor_msgs/msg/LaserScan.h"
 #include "std_msgs/msg/Empty.h"
+#include "std_msgs/msg/String.h"
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/Scheduler.h>
@@ -83,6 +84,7 @@ private:
     // incoming 360 lidar data
     static sensor_msgs_msg_LaserScan rx_laser_scan_topic;
     std_msgs_msg_Empty empty_msg;
+    static std_msgs_msg_String rx_attached_state_topic;
 
     HAL_Semaphore csem;
 
@@ -285,10 +287,15 @@ public:
     static const sensor_msgs_msg_LaserScan* getLaserScanData() {
         return &rx_laser_scan_topic;
     };
+    static const std_msgs_msg_String* getAttachedState() {
+        return &rx_attached_state_topic;
+    };
     static bool rx_laser_scan_used;
 
     static bool need_to_pub_attach_detach;
     static bool desire_attach;
+
+    static bool attached_state;
 
 };
 

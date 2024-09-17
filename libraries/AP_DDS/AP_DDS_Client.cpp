@@ -51,6 +51,8 @@ sensor_msgs_msg_LaserScan AP_DDS_Client::rx_laser_scan_topic {};
 bool AP_DDS_Client::need_to_pub_attach_detach = false;
 bool AP_DDS_Client::desire_attach = false;
 bool AP_DDS_Client::rx_laser_scan_used = false;
+std_msgs_msg_String AP_DDS_Client::rx_attached_state_topic {};
+bool AP_DDS_Client::attached_state = false;
 
 
 const AP_Param::GroupInfo AP_DDS_Client::var_info[] {
@@ -621,6 +623,31 @@ void AP_DDS_Client::on_topic(uxrSession* uxr_session, uxrObjectId object_id, uin
             // GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "%s Received sensor_msgs/LaserScan: %f",
             //               msg_prefix, rx_laser_scan_topic.ranges[0]);
             AP_DDS_Client::rx_laser_scan_used = false;
+        }
+        break;
+    }
+    case topics[to_underlying(TopicIndex::ATTACHED_STATE_SUB)].dr_id.id: {
+        const bool success = std_msgs_msg_String_deserialize_topic(ub, &rx_attached_state_topic);
+
+        if (success == false) {
+            GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "/String Failed to deserialize!");
+            break;
+        }
+
+        if (success) {
+            if (strcmp(rx_attached_state_topic.data, "attached")==0) 
+            {
+                AP_DDS_Client::attached_state = true;
+            } 
+            else if (strcmp(rx_attached_state_topic.data, "detached")==0)
+            {
+                AP_DDS_Client::attached_state = false;
+            } 
+            else 
+            {
+                GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Undefined attach state: %s", rx_attached_state_topic.data);
+                AP_DDS_Client::attached_state = false;
+            }
         }
         break;
     }

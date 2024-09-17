@@ -1306,9 +1306,11 @@ public:
     bool is_autopilot() const override { return false; }
     bool has_user_takeoff(bool must_navigate) const override { return true; }
     bool allows_autotune() const override { return true; }
+    bool crash_check_enabled() const override { return _crash_check_enabled; }
 
     bool attach();
     bool detach();
+    bool attached();
 
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -1339,9 +1341,17 @@ private:
     float _cos_yaw_obs;
     float _distance_target_cm;
     bool _target_acquired;
+    bool _crash_check_enabled {true};
 
-    bool attach_armed {false};
-    bool _min_dist_enabled {true};
+    // docking state
+    enum class DockingState : uint8_t {
+        NOT_DOCKING = 0,            // default loiter assisted mode (not in attach/detach mode)
+        ATTACH_MANEUVER,            // attach maneuver engaged
+        DETACH_MANEUVER,            // detach maneuver engaged
+        ATTACHED                    // how to behave when we're attached
+    };
+
+    DockingState _docking_state = DockingState::NOT_DOCKING;
 
     // Define parameters
     AP_Float _pitch_to_fw_vel_gain;

@@ -9,7 +9,9 @@
 
 #define PITCH_TO_FW_VEL_GAIN_DEFAULT         0.1
 #define ROLL_TO_RT_VEL_GAIN_DEFAULT          0.1
-#define MIN_OBS_DIST_CM_DEFAULT              150
+#define MIN_OBS_DIST_CM_DEFAULT              200
+
+#define DOCK_TARGET_DIST_CM                  0.0
 
 const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Param: P_2_FW_VEL
@@ -47,6 +49,8 @@ ModeLoiterAssisted::ModeLoiterAssisted(void) : Mode()
 bool ModeLoiterAssisted::init(bool ignore_checks)
 {
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Mode set to Loiter Assisted");
+    _crash_check_enabled = true;
+    _docking_state = DockingState::NOT_DOCKING;
     if (!copter.failsafe.radio) {
         float target_roll, target_pitch;
         // apply SIMPLE mode transform to pilot inputs
@@ -77,7 +81,7 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     _cos_yaw_obs = cosf(ahrs.get_yaw());
 
     _target_acquired = false;
-    _distance_target_cm = 300.0f;
+    _distance_target_cm = MIN_OBS_DIST_CM_DEFAULT;
 
     copter.set_simple_mode(Copter::SimpleMode::NONE); // disable simple mode for this mode. TODO: Validate
 
@@ -90,35 +94,44 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     return true;
 }
 
-bool ModeLoiterAssisted::attach() {
-    if (attach_armed) {
+bool ModeLoiterAssisted::attach() { // init attach engaged via RC_Channel
+    if (_docking_state == DockingState::ATTACH_MANEUVER) {
         return true;
     }
     // AP_DDS publish attach message... should change to state setup?
     AP_DDS_Client::need_to_pub_attach_detach = true;
     AP_DDS_Client::desire_attach = true;
-    // Disable min distance
-    _min_dist_enabled = false;
+
+    _crash_check_enabled = false;
     
-    attach_armed = true;
+    _docking_state = DockingState::ATTACH_MANEUVER;
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Attach primed");
     return true;
 }
-bool ModeLoiterAssisted::detach() {
-    if (!attach_armed) {
+
+bool ModeLoiterAssisted::detach() { // init detach engaged via RC_Channel
+    if (_docking_state == DockingState::DETACH_MANEUVER) {
         return true;
     }
     // AP_DDS publish detach message
     AP_DDS_Client::need_to_pub_attach_detach = true;
     AP_DDS_Client::desire_attach = false;
-    // Enable min distance 
-    _min_dist_enabled = true;
 
     // Set target far away
     _distance_target_cm = _min_obs_dist_cm;
 
-    attach_armed = false;
+    _docking_state = DockingState::DETACH_MANEUVER;
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Detach primed");
+    return true;
+}
+
+bool ModeLoiterAssisted::attached() { // start being attached
+    if (_docking_state == DockingState::ATTACHED) {
+        return true;
+    }
+
+    _docking_state = DockingState::ATTACHED;
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Attached!");
     return true;
 }
 
@@ -276,14 +289,39 @@ void ModeLoiterAssisted::run()
                 _distance_target_cm -= vel_fw*pos_control->get_dt();
             }
 
-            // Min dist check
-            if (_min_dist_enabled) {
-                if (_distance_target_cm < _min_obs_dist_cm) {
-                    _distance_target_cm = _min_obs_dist_cm;
-                }
+            // Docking state controller
+            switch (_docking_state){
+                case DockingState::ATTACH_MANEUVER:
+                    _distance_target_cm = DOCK_TARGET_DIST_CM;
+                    if(AP_DDS_Client::attached_state) { //signal from sensor
+                        attached();
+                    }
+                    break;
+                case DockingState::DETACH_MANEUVER:
+                     _distance_target_cm = 50000; // set pos target wayyyyy back
+                     pos_control->set_pos_target_z_cm(get_alt_above_ground_cm()-100.0); // set z target below where we are
+                     if (dist_to_obs_m * 100.0 >= _min_obs_dist_cm) {
+                        init(false); //reinitialize loiter controller
+                     }
+                    break;
+                case DockingState::ATTACHED:
+                    if(!AP_DDS_Client::attached_state) { //this is bad news if we become unattached without manually unattaching!
+                        GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY, "Unexpected detach!");
+                        _docking_state = DockingState::ATTACHED;
+                    }
+                    pos_control->relax_velocity_controller_xy();
+                    pos_control->relax_z_controller(0.0f);
+                    return;
+                    break;
+                case DockingState::NOT_DOCKING:
+                    FALLTHROUGH;
+                default:
+                    if (_distance_target_cm < _min_obs_dist_cm) {
+                        _distance_target_cm = _min_obs_dist_cm;
+                    }
+                    break;
             }
             
-
             float distance_err_cm = dist_to_obs_m * 100.0 - _distance_target_cm;
             Vector2p dist_correction(
                 distance_err_cm*_cos_yaw_obs,

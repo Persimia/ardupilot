@@ -28,7 +28,8 @@ enum class TopicIndex: uint8_t {
     GLOBAL_POSITION_SUB,
     LASER_SCAN_SUB,
     ATTACH_PUB,
-    DETACH_PUB
+    DETACH_PUB,
+    ATTACHED_STATE_SUB
 };
 
 static inline constexpr uint8_t to_underlying(const TopicIndex index)
@@ -306,6 +307,22 @@ constexpr struct AP_DDS_Client::Topic_table AP_DDS_Client::topics[] = {
         .type_name = "std_msgs::msg::dds_::Empty_",
         .qos = {
             .durability = UXR_DURABILITY_TRANSIENT_LOCAL,
+            .reliability = UXR_RELIABILITY_RELIABLE,
+            .history = UXR_HISTORY_KEEP_LAST,
+            .depth = 1,
+        },
+    },
+    {
+        .topic_id = to_underlying(TopicIndex::ATTACHED_STATE_SUB),
+        .pub_id = to_underlying(TopicIndex::ATTACHED_STATE_SUB),
+        .sub_id = to_underlying(TopicIndex::ATTACHED_STATE_SUB),
+        .dw_id = uxrObjectId{.id=to_underlying(TopicIndex::ATTACHED_STATE_SUB), .type=UXR_DATAWRITER_ID},
+        .dr_id = uxrObjectId{.id=to_underlying(TopicIndex::ATTACHED_STATE_SUB), .type=UXR_DATAREADER_ID},
+        .topic_rw = Topic_rw::DataReader,
+        .topic_name = "rt/attached_state",
+        .type_name = "std_msgs::msg::dds_::String_",
+        .qos = {
+            .durability = UXR_DURABILITY_VOLATILE,
             .reliability = UXR_RELIABILITY_RELIABLE,
             .history = UXR_HISTORY_KEEP_LAST,
             .depth = 1,
