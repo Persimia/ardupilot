@@ -27,6 +27,9 @@ enum class TopicIndex: uint8_t {
     VELOCITY_CONTROL_SUB,
     GLOBAL_POSITION_SUB,
     LASER_SCAN_SUB,
+    ATTACH_PUB,
+    DETACH_PUB,
+    ATTACHED_STATE_SUB
 };
 
 static inline constexpr uint8_t to_underlying(const TopicIndex index)
@@ -273,6 +276,54 @@ constexpr struct AP_DDS_Client::Topic_table AP_DDS_Client::topics[] = {
         .qos = {
             .durability = UXR_DURABILITY_VOLATILE,
             .reliability = UXR_RELIABILITY_BEST_EFFORT,
+            .history = UXR_HISTORY_KEEP_LAST,
+            .depth = 1,
+        },
+    },
+    {
+        .topic_id = to_underlying(TopicIndex::ATTACH_PUB),
+        .pub_id = to_underlying(TopicIndex::ATTACH_PUB),
+        .sub_id = to_underlying(TopicIndex::ATTACH_PUB),
+        .dw_id = uxrObjectId{.id=to_underlying(TopicIndex::ATTACH_PUB), .type=UXR_DATAWRITER_ID},
+        .dr_id = uxrObjectId{.id=to_underlying(TopicIndex::ATTACH_PUB), .type=UXR_DATAREADER_ID},
+        .topic_rw = Topic_rw::DataWriter,
+        .topic_name = "rt/attach",
+        .type_name = "std_msgs::msg::dds_::Empty_",
+        .qos = {
+            .durability = UXR_DURABILITY_TRANSIENT_LOCAL,
+            .reliability = UXR_RELIABILITY_RELIABLE,
+            .history = UXR_HISTORY_KEEP_LAST,
+            .depth = 1,
+        },
+    },
+    {
+        .topic_id = to_underlying(TopicIndex::DETACH_PUB),
+        .pub_id = to_underlying(TopicIndex::DETACH_PUB),
+        .sub_id = to_underlying(TopicIndex::DETACH_PUB),
+        .dw_id = uxrObjectId{.id=to_underlying(TopicIndex::DETACH_PUB), .type=UXR_DATAWRITER_ID},
+        .dr_id = uxrObjectId{.id=to_underlying(TopicIndex::DETACH_PUB), .type=UXR_DATAREADER_ID},
+        .topic_rw = Topic_rw::DataWriter,
+        .topic_name = "rt/detach",
+        .type_name = "std_msgs::msg::dds_::Empty_",
+        .qos = {
+            .durability = UXR_DURABILITY_TRANSIENT_LOCAL,
+            .reliability = UXR_RELIABILITY_RELIABLE,
+            .history = UXR_HISTORY_KEEP_LAST,
+            .depth = 1,
+        },
+    },
+    {
+        .topic_id = to_underlying(TopicIndex::ATTACHED_STATE_SUB),
+        .pub_id = to_underlying(TopicIndex::ATTACHED_STATE_SUB),
+        .sub_id = to_underlying(TopicIndex::ATTACHED_STATE_SUB),
+        .dw_id = uxrObjectId{.id=to_underlying(TopicIndex::ATTACHED_STATE_SUB), .type=UXR_DATAWRITER_ID},
+        .dr_id = uxrObjectId{.id=to_underlying(TopicIndex::ATTACHED_STATE_SUB), .type=UXR_DATAREADER_ID},
+        .topic_rw = Topic_rw::DataReader,
+        .topic_name = "rt/attached_state",
+        .type_name = "std_msgs::msg::dds_::String_",
+        .qos = {
+            .durability = UXR_DURABILITY_VOLATILE,
+            .reliability = UXR_RELIABILITY_RELIABLE,
             .history = UXR_HISTORY_KEEP_LAST,
             .depth = 1,
         },
