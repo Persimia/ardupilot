@@ -304,7 +304,6 @@ void ModeLoiterAssisted::run()
                 auto_yaw.set_fixed_yaw(abs(_filt_yaw_cmd_deg), 0.0f, direction, true);
                 _last_heading_cmd_deg = _filt_yaw_cmd_deg;
                 _last_yaw_update_ms = millis();
-                ::fprintf(stderr,"_yaw_alpha: %.2f\trelative yaw: %.2f\tobs heading: %.2f\n",float(_yaw_alpha),yaw_to_obs_deg,_filt_yaw_cmd_deg);
             }
             // END YAW CONTROLLER //
 
@@ -361,10 +360,6 @@ void ModeLoiterAssisted::run()
 
             pos_control->input_pos_vel_accel_xy(target_pos, target_vel, zero); // input pos and vel targets
             pos_control->update_xy_controller(); // run pos controller
-
-            // ::fprintf(stderr, "dtcm: %.0f, decm: %.1f, tp: %.0f, %.0f, dc: %.0f, %.0f\n",
-            // _distance_target_cm, distance_err_cm, target_pos[0], target_pos[1],
-            // dist_correction[0], dist_correction[1]);
             // END POSITION CONTROL //
             
             // AUGMENT CONTROL //
