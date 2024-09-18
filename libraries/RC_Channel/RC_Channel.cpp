@@ -240,6 +240,7 @@ const AP_Param::GroupInfo RC_Channel::var_info[] = {
     // @Values{Copter, Rover, Plane, Blimp}: 177:Mount LRF enable
     // @Values{Copter}: 178:FlightMode Pause/Resume
     // @Values{Copter, Plane}: 180:Test autotuned gains after tune is complete
+    // @Values{Copter}: 181:Attach/Detach
     // @Values{Rover}: 201:Roll
     // @Values{Rover}: 202:Pitch
     // @Values{Rover}: 207:MainSail
@@ -820,6 +821,7 @@ const RC_Channel::LookupTable RC_Channel::lookuptable[] = {
     { AUX_FUNC::CAMERA_IMAGE_TRACKING, "Camera Image Tracking"},
     { AUX_FUNC::CAMERA_LENS, "Camera Lens"},
     { AUX_FUNC::MOUNT_LRF_ENABLE, "Mount LRF Enable"},
+    { AUX_FUNC::LASS_ATTACH_DETACH,"AttachDetach"},
 };
 
 /* lookup the announcement for switch change */
