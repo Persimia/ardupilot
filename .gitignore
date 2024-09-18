@@ -173,9 +173,14 @@ venv.bak/
 autotest_result_*_junit.xml
 
 
-#ignore vehicles
-/vehicles/*
-
+# Ignore vs code settings
 */.vscode
 .vscode/*
 
+# Ignore mavproxy files
+mav.tlog
+mav.tlog.raw
+
+# Ignore crashdump files
+dumpcore.sh_**
+dumpstack.sh_**
