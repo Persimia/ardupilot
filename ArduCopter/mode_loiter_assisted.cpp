@@ -10,8 +10,9 @@
 #define PITCH_TO_FW_VEL_GAIN_DEFAULT         0.1
 #define ROLL_TO_RT_VEL_GAIN_DEFAULT          0.1
 #define MIN_OBS_DIST_CM_DEFAULT              200
-#define YAW_ALPHA_DEFAULT                    0.2
+#define YAW_HZ_DEFAULT                       5.0
 #define YAW_DEADZONE_DEFAULT                 2.0
+#define DIST_HZ_DEFAULT                      5.0
 
 #define DOCK_TARGET_DIST_CM                  0.0
 
@@ -38,12 +39,12 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("MIN_DIST", 3, ModeLoiterAssisted, _min_obs_dist_cm, MIN_OBS_DIST_CM_DEFAULT),
 
-    // @Param: YAW_ALPHA
+    // @Param: YAW_HZ
     // @DisplayName: Yaw LPF alpha
     // @Description: This is the alpha for lpf on yaw [x*a + y*(a-1)]
-    // @Range: 0 1
+    // @Range: 0 100
     // @User: Advanced
-    AP_GROUPINFO("YAW_ALPHA", 4, ModeLoiterAssisted, _yaw_alpha, YAW_ALPHA_DEFAULT),
+    AP_GROUPINFO("YAW_HZ", 4, ModeLoiterAssisted, _yaw_hz, YAW_HZ_DEFAULT),
 
     // @Param: YAW_DZ
     // @DisplayName: Yaw controller deadzone
@@ -52,6 +53,13 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Range: 0 180
     // @User: Advanced
     AP_GROUPINFO("YAW_DZ", 5, ModeLoiterAssisted, _yaw_dz, YAW_DEADZONE_DEFAULT),
+
+    // @Param: DIST_HZ
+    // @DisplayName: Dist LPF alpha
+    // @Description: This is the alpha for lpf on dist [x*a + y*(a-1)]
+    // @Range: 0 100
+    // @User: Advanced
+    AP_GROUPINFO("DIST_HZ", 6, ModeLoiterAssisted, _dist_hz, DIST_HZ_DEFAULT),
 
     AP_GROUPEND
 };
@@ -66,8 +74,7 @@ ModeLoiterAssisted::ModeLoiterAssisted(void) : Mode()
 bool ModeLoiterAssisted::init(bool ignore_checks)
 {
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Mode set to Loiter Assisted");
-    _crash_check_enabled = true;
-    _docking_state = DockingState::NOT_DOCKING;
+
     if (!copter.failsafe.radio) {
         float target_roll, target_pitch;
         // apply SIMPLE mode transform to pilot inputs
@@ -98,9 +105,14 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     _cos_yaw_obs = cosf(ahrs.get_yaw());
 
     _target_acquired = false;
-    _distance_target_cm = MIN_OBS_DIST_CM_DEFAULT;
+    _distance_target_cm = _min_obs_dist_cm;
 
     copter.set_simple_mode(Copter::SimpleMode::NONE); // disable simple mode for this mode. TODO: Validate
+
+    _crash_check_enabled = true;
+    _docking_state = DockingState::NOT_DOCKING;
+    _yaw_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _yaw_hz.get());
+    _dist_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dist_hz.get());
 
 #if AC_PRECLAND_ENABLED
     _precision_loiter_active = false;
@@ -199,6 +211,14 @@ void ModeLoiterAssisted::run()
     float target_yaw_rate = 0.0f;
     float target_climb_rate = 0.0f;
 
+    // check for filter change
+    if (!is_equal(_yaw_filter.get_cutoff_freq(), _yaw_hz.get())) {
+        _yaw_filter.set_cutoff_frequency(_yaw_hz.get());
+    }
+    if (!is_equal(_dist_filter.get_cutoff_freq(), _dist_hz.get())) {
+        _dist_filter.set_cutoff_frequency(_dist_hz.get());
+    }
+
     // set vertical speed and acceleration limits
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
 
@@ -288,27 +308,26 @@ void ModeLoiterAssisted::run()
 
             if(!_target_acquired){// Reacquired target so reset yaw. TODO manage this state better
                 _distance_target_cm = dist_to_obs_m * 100.0;
-                _filt_yaw_cmd_deg = yaw_to_obs_deg;
                 _target_acquired = true; //TODO control this more clearly
             }
-
-
             
             // YAW CONTROLLER //
             /*Update the heading controller at a low rate (this is because the auto yaw controller uses
             a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/
-            _filt_yaw_cmd_deg = (_yaw_alpha)*yaw_to_obs_deg + (1.0f-_yaw_alpha)*_filt_yaw_cmd_deg; 
-            bool dz_exceeded = abs(_filt_yaw_cmd_deg - _last_heading_cmd_deg) > _yaw_dz;
+            float filt_yaw_cmd_deg = _yaw_filter.apply(yaw_to_obs_deg); 
+            // bool dz_exceeded = abs(filt_yaw_cmd_deg - _last_yaw_cmd_deg) > _yaw_dz;
+            bool dz_exceeded = true;
             if ((millis() - _last_yaw_update_ms > 200) && dz_exceeded) { // || auto_yaw.reached_fixed_yaw_target()
-                int8_t direction = (_filt_yaw_cmd_deg >= 0 ? 1.0 : -1.0);
-                auto_yaw.set_fixed_yaw(abs(_filt_yaw_cmd_deg), 0.0f, direction, true);
-                _last_heading_cmd_deg = _filt_yaw_cmd_deg;
+                int8_t direction = (filt_yaw_cmd_deg >= 0 ? 1.0 : -1.0);
+                auto_yaw.set_fixed_yaw(abs(filt_yaw_cmd_deg), 0.0f, direction, true);
+                _last_yaw_cmd_deg = filt_yaw_cmd_deg;
                 _last_yaw_update_ms = millis();
             }
             // END YAW CONTROLLER //
 
             // POSITION CONTROLLER //
-            float vel_fw = -_pitch_to_fw_vel_gain * target_pitch; //Forward Velocity Command TODO: Make this a parameter gain!
+            float filt_dist_to_obs_m = _dist_filter.apply(dist_to_obs_m);
+            float vel_fw = -_pitch_to_fw_vel_gain * target_pitch; //Forward Velocity Command 
             float vel_rt =  _roll_to_rt_vel_gain * target_roll; //Right Velocity Command 
             _distance_target_cm -= vel_fw*pos_control->get_dt();
 
@@ -323,7 +342,7 @@ void ModeLoiterAssisted::run()
                 case DockingState::DETACH_MANEUVER:
                      _distance_target_cm = 50000; // set pos target wayyyyy back
                      pos_control->set_pos_target_z_cm(get_alt_above_ground_cm()-100.0); // set z target below where we are
-                     if (dist_to_obs_m * 100.0 >= _min_obs_dist_cm) {
+                     if (filt_dist_to_obs_m * 100.0 >= _min_obs_dist_cm) {
                         init(false); //reinitialize loiter controller
                      }
                     break;
@@ -345,7 +364,7 @@ void ModeLoiterAssisted::run()
                     break;
             }
             
-            float distance_err_cm = dist_to_obs_m * 100.0 - _distance_target_cm;
+            float distance_err_cm = filt_dist_to_obs_m * 100.0 - _distance_target_cm;
             Vector2p dist_correction(
                 distance_err_cm*_cos_yaw_obs,
                 distance_err_cm*_sin_yaw_obs
