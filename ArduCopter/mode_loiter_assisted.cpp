@@ -11,7 +11,7 @@
 #define ROLL_TO_RT_VEL_GAIN_DEFAULT          0.1
 #define MIN_OBS_DIST_CM_DEFAULT              200
 #define YAW_HZ_DEFAULT                       5.0
-#define YAW_DEADZONE_DEFAULT                 2.0
+#define YAW_DEADZONE_DEFAULT                 6.0
 #define DIST_HZ_DEFAULT                      5.0
 
 #define DOCK_TARGET_DIST_CM                  0.0
@@ -315,8 +315,8 @@ void ModeLoiterAssisted::run()
             /*Update the heading controller at a low rate (this is because the auto yaw controller uses
             a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/
             float filt_yaw_cmd_deg = _yaw_filter.apply(yaw_to_obs_deg); 
-            // bool dz_exceeded = abs(filt_yaw_cmd_deg - _last_yaw_cmd_deg) > _yaw_dz;
-            bool dz_exceeded = true;
+            bool dz_exceeded = abs(filt_yaw_cmd_deg - _last_yaw_cmd_deg) > _yaw_dz;
+            // bool dz_exceeded = true;
             if ((millis() - _last_yaw_update_ms > 200) && dz_exceeded) { // || auto_yaw.reached_fixed_yaw_target()
                 int8_t direction = (filt_yaw_cmd_deg >= 0 ? 1.0 : -1.0);
                 auto_yaw.set_fixed_yaw(abs(filt_yaw_cmd_deg), 0.0f, direction, true);
