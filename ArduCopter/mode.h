@@ -1357,13 +1357,16 @@ private:
     AP_Float _pitch_to_fw_vel_gain;
     AP_Float _roll_to_rt_vel_gain;
     AP_Float _min_obs_dist_cm;
-    AP_Float _yaw_alpha;
+    AP_Float _yaw_hz;
     AP_Float _yaw_dz;
+    AP_Float _dist_hz;
 
-    float _filt_yaw_cmd_deg;
     uint32_t _last_yaw_update_ms;
 
-    float _last_heading_cmd_deg;
+    float _last_yaw_cmd_deg;
+
+    LowPassFilterFloat _dist_filter;
+    LowPassFilterFloat _yaw_filter;
 
 
 #if AC_PRECLAND_ENABLED
