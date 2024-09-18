@@ -10,9 +10,9 @@
 #define PITCH_TO_FW_VEL_GAIN_DEFAULT         0.1
 #define ROLL_TO_RT_VEL_GAIN_DEFAULT          0.1
 #define MIN_OBS_DIST_CM_DEFAULT              200
-#define YAW_HZ_DEFAULT                       5.0
+#define YAW_HZ_DEFAULT                       1.0
 #define YAW_DEADZONE_DEFAULT                 6.0
-#define DIST_HZ_DEFAULT                      5.0
+#define DIST_HZ_DEFAULT                      1.0
 
 #define DOCK_TARGET_DIST_CM                  0.0
 
