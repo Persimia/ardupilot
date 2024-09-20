@@ -3,6 +3,7 @@
 #include "Copter.h"
 #include <AP_Math/chirp.h>
 #include <AP_ExternalControl/AP_ExternalControl_config.h> // TODO why is this needed if Copter.h includes this
+#include <deque>
 
 class Parameters;
 class ParametersG2;
@@ -1337,8 +1338,6 @@ protected:
 #endif
 
 private:
-    float _sin_yaw_obs;
-    float _cos_yaw_obs;
     float _distance_target_cm;
     bool _target_acquired;
     bool _crash_check_enabled {true};
@@ -1359,15 +1358,60 @@ private:
     AP_Float _min_obs_dist_cm;
     AP_Float _yaw_hz;
     AP_Float _yaw_dz;
-    AP_Float _dist_hz;
+    AP_Float _pos_filt_hz;
+    AP_Float _dist_filt_hz;
+    AP_Int32 _wv_window_size;
+    AP_Float _wv_thresh;
+    AP_Float _dock_speed_mps;
+    AP_Float _undock_speed_mps;
 
     uint32_t _last_yaw_update_ms;
 
     float _last_yaw_cmd_deg;
 
-    LowPassFilterFloat _dist_filter;
-    LowPassFilterFloat _yaw_filter;
+    float _last_yaw_to_obs_deg;
+    float _last_dist_to_obs_m;
 
+    float _last_yaw_deg;
+    Vector2f _last_vehicle_pos;
+
+    LowPassFilterFloat _yaw_filter;
+    LowPassFilterFloat _dist_filter;
+    LowPassFilterVector3f _dock_target_pos_filter;
+
+    class WindowVar {
+        public:
+            // Members of the nested class
+            WindowVar() : WindowVar(10) {}
+            WindowVar(int32_t window_size) : _window_size(window_size), _sum(Vector3f(0.0f,0.0f,0.0f)), _sum_of_squares(Vector3f(0.0f,0.0f,0.0f)) {}
+            bool apply(Vector3f value, Vector3f &current_variance);
+            void reset();
+            int32_t get_window_size(){return _window_size;}
+            void set_new_window_size(int32_t new_size){_window_size=new_size;}
+
+        private:
+            size_t _window_size;
+            std::deque<Vector3f> _values;
+            Vector3f _sum;              // Sum of the _values in the window
+            Vector3f _sum_of_squares;   // Sum of the squares of the _values
+    };
+    
+    WindowVar _dock_target_window_var;
+    bool _ready_to_dock{false};
+
+    Vector2p _xy_pos; // xy pos in NEU cm
+    Vector2f _xy_vel; // xy vel in NEU cm
+    const Vector2f _xy_accel{0,0};
+    float _z_pos;
+    float _z_vel{0};
+    const float _z_accel{0};
+    float _filt_yaw_cmd_deg;
+    float _bearing_cd;
+
+    bool _lock_commands{false}; //Whether or not to lock the estimates for position
+
+    Vector3f _current_vehicle_position;
+    Vector3f _filt_dock_target_pos;
 
 #if AC_PRECLAND_ENABLED
     bool _precision_loiter_enabled;
