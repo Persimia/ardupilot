@@ -2,9 +2,34 @@
 
 #if MODE_DOCK_ENABLED == ENABLED
 
+#define DOCK_VELXY_MAX_DEFAULT 100.0
+#define DOCK_MIN_DIST_DEFAULT 500
+
 /*
- * Init and run calls for loiter flight mode
+ * Init and run calls for dock flight mode
  */
+
+const AP_Param::GroupInfo ModeDock::var_info[] = {
+    // @Param: DOCK_VELXY_MAX
+    // @DisplayName: Maximum Flight speed in Dock Mode
+    // @Description: Maximum Flight speed in Dock Mode
+    // @Range: 0 200
+    // @User: Advanced
+    AP_GROUPINFO("VEL_MAX", 1, ModeDock, dock_velxy_max, DOCK_VELXY_MAX_DEFAULT),
+
+    // @Param: DOCK_MIN_DIST
+    // @DisplayName: Minimum distance to target
+    // @Description: Minimum distance to target
+    // @Range: 0 50
+    // @User: Advanced
+    AP_GROUPINFO("MIN_DIST", 2, ModeDock, dock_min_dist, DOCK_MIN_DIST_DEFAULT),
+    AP_GROUPEND
+};
+
+ModeDock::ModeDock(void) : Mode()
+{
+    AP_Param::setup_object_defaults(this, var_info);
+}
 
 // loiter_init - initialise loiter controller
 bool ModeDock::init(bool ignore_checks)
@@ -14,7 +39,7 @@ bool ModeDock::init(bool ignore_checks)
         // apply SIMPLE mode transform to pilot inputs
         update_simple_mode();
 
-        // convert pilot input to lean angles TODO change to get_pilot_desired_vel()
+        // convert pilot input to lean angles
         get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
 
         // process pilot's roll and pitch input
@@ -43,6 +68,9 @@ bool ModeDock::init(bool ignore_checks)
 
     target_acquired = false;
     distance_target = 3.0;
+
+    // Get Params
+    dock_velxy_max.load();
 
     return true;
 }
@@ -73,7 +101,7 @@ void ModeDock::run()
 
         // convert pilot input to lean angles TODO: change to get_pilot_desired_vel()
         get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
-
+        
         // process pilot's roll and pitch input
         loiter_nav->set_pilot_desired_acceleration(target_roll, target_pitch);
 
@@ -94,10 +122,10 @@ void ModeDock::run()
     }
 
     // Loiter State Machine Determination
-    AltHoldModeState dock_state = get_alt_hold_state(target_climb_rate);
+    AltHoldModeState flight_state = get_alt_hold_state(target_climb_rate);
 
     // Loiter State Machine
-    switch (dock_state) {
+    switch (flight_state) {
 
     case AltHoldModeState::MotorStopped:
         attitude_control->reset_rate_controller_I_terms();
@@ -133,8 +161,7 @@ void ModeDock::run()
         takeoff.do_pilot_takeoff(target_climb_rate);
 
         // run loiter controller
-        loiter_nav->update(false); // false => don't run obstacle avoidance
-
+        loiter_nav->update();
         // call attitude controller
         attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
         target_acquired = false;
@@ -144,6 +171,7 @@ void ModeDock::run()
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
         AC_AttitudeControl::HeadingCommand heading_cmd;
+        Vector2f target_vel_xy = get_pilot_desired_velocity_xy(dock_velxy_max.get());
         // Get Yaw angle and distance to closest object from AP_Proximity
         float yaw_to_obst_deg;
         float dist_to_obst_m;
@@ -160,20 +188,19 @@ void ModeDock::run()
                 int8_t direction = (yaw_to_obst_deg >= 0 ? 1.0 : -1.0);
                 auto_yaw.set_fixed_yaw(abs(yaw_to_obst_deg), 0.0f, direction, true);
 
-                //GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "X:%f Y:%f Z: %f", targ[0], targ[1], targ[2]);
-
                 float heading_obst = ahrs.get_yaw() + yaw_to_obst_deg*DEG_TO_RAD;
                 sin_yaw_obst = sinf(heading_obst);
                 cos_yaw_obst = cosf(heading_obst);
-                
-                
+
+                Vector2f center_of_curvature;
+                int fit_type = g2.proximity.curvefit.compute_curvature_center(center_of_curvature);
+                GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "X:%f Y:%f Type: %i", center_of_curvature.x, center_of_curvature.y, fit_type);
+
             }
              heading_cmd = auto_yaw.get_heading();
             // END YAW CONTROLLER //
 
             // POSITION CONTROLLER //
-            float vel_fw = -0.1f * target_pitch; //Forward Velocity Command
-            float vel_rt =  0.1f * target_roll; //Right Velocity Command
 
             if(!target_acquired){// Reacquired target so reset distance
                 distance_target = dist_to_obst_m * 100.0;
@@ -181,7 +208,7 @@ void ModeDock::run()
                 GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Target Acquired");
             }
             else{
-                distance_target -= vel_fw*pos_control->get_dt();
+                distance_target -= target_vel_xy.x*pos_control->get_dt();
             }
 
 
@@ -200,8 +227,8 @@ void ModeDock::run()
             target_pos = target_pos + dist_correction;
 
             Vector2f target_vel(
-                -vel_rt*sin_yaw_obst,
-                vel_rt*cos_yaw_obst
+                -target_vel_xy.y*sin_yaw_obst,
+                target_vel_xy.y*cos_yaw_obst
             );
 
             Vector2f zero;
@@ -216,10 +243,13 @@ void ModeDock::run()
         }else{
             heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Rate_Only;
             heading_cmd.yaw_rate_cds = target_yaw_rate;
+            if(target_acquired){
+                GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Target Lost");
+            }
             target_acquired = false;
-            GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Target Lost");
+            
 
-            loiter_nav->update(false); // false => don't run obstacle avoidance
+            loiter_nav->update(); // false => don't run obstacle avoidance
 
 
             thrust_vector = loiter_nav->get_thrust_vector();

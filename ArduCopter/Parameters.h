@@ -687,6 +687,7 @@ public:
     AP_Float pldp_descent_speed_ms;
 
     void *mode_loiter_assisted_ptr;
+    void *mode_dock_ptr;
 };
 
 extern const AP_Param::Info        var_info[];

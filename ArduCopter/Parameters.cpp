@@ -1236,6 +1236,10 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Path: mode_loiter_assisted.cpp
     AP_SUBGROUPPTR(mode_loiter_assisted_ptr, "LASS_", 9, ParametersG2, ModeLoiterAssisted),
 
+    // @Group: DOCK_
+    // @Path: mode_dock.cpp
+    AP_SUBGROUPPTR(mode_dock_ptr, "DOCK_", 10, ParametersG2, ModeDock),
+
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 
     AP_GROUPEND
@@ -1298,6 +1302,7 @@ ParametersG2::ParametersG2(void)
     ,weathervane()
 #endif
     ,mode_loiter_assisted_ptr(&copter.mode_loiter_assisted)
+    ,mode_dock_ptr(&copter.mode_dock)
 {
     AP_Param::setup_object_defaults(this, var_info);
     AP_Param::setup_object_defaults(this, var_info2);

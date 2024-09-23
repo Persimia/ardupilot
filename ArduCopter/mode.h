@@ -165,6 +165,7 @@ public:
     // pilot input processing
     void get_pilot_desired_lean_angles(float &roll_out_cd, float &pitch_out_cd, float angle_max_cd, float angle_limit_cd) const;
     Vector2f get_pilot_desired_velocity(float vel_max) const;
+    Vector2f get_pilot_desired_velocity_xy(float vel_max) const;
     float get_pilot_desired_yaw_rate(float yaw_in);
     float get_pilot_desired_throttle() const;
 
@@ -1692,6 +1693,7 @@ private:
 class ModeDock : public Mode {
 
 public:
+    ModeDock(void);
     // inherit constructor
     using Mode::Mode;
     Number mode_number() const override { return Number::DOCK; }
@@ -1703,8 +1705,10 @@ public:
     bool has_manual_throttle() const override { return false; }
     bool allows_arming(AP_Arming::Method method) const override { return true; };
     bool is_autopilot() const override { return false; }
-    bool has_user_takeoff(bool must_navigate) const override { return true; }
-    bool allows_autotune() const override { return true; }
+    bool has_user_takeoff(bool must_navigate) const override { return false; }
+    bool allows_autotune() const override { return false; }
+
+    static const struct AP_Param::GroupInfo var_info[];
 
 #if FRAME_CONFIG == HELI_FRAME
     bool allows_inverted() const override { return true; };
@@ -1726,6 +1730,9 @@ private:
     double distance_target;
     bool target_acquired;
 
+    // Parameters
+    AP_Float dock_velxy_max;
+    AP_Float dock_min_dist;
 };
 
 #if FRAME_CONFIG == HELI_FRAME
