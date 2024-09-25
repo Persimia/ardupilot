@@ -30,7 +30,7 @@
 
 extern const AP_HAL::HAL& hal;
 
-static const uint32_t PROXIMITY_SF45B_TIMEOUT_MS = 200;
+static const uint32_t PROXIMITY_SF45B_TIMEOUT_MS = 2000; // This was originally 200, needed to be change to factor in lower rates from gazebo sim
 static const uint32_t PROXIMITY_SF45B_REINIT_INTERVAL_MS = 5000;    // re-initialise sensor after this many milliseconds
 static const float PROXIMITY_SF45B_COMBINE_READINGS_DEG = 5.0f;     // combine readings from within this many degrees to improve efficiency
 static const uint32_t PROXIMITY_SF45B_STREAM_DISTANCE_DATA_CM = 5;
