@@ -2,8 +2,8 @@
 
 #if MODE_DOCK_ENABLED == ENABLED
 
-#define DOCK_VELXY_MAX_DEFAULT 100.0
-#define DOCK_MIN_DIST_DEFAULT 500
+#define DOCK_VELXY_MAX_DEFAULT 200.0
+#define DOCK_MIN_DIST_DEFAULT 100.0
 
 /*
  * Init and run calls for dock flight mode
@@ -11,8 +11,8 @@
 
 const AP_Param::GroupInfo ModeDock::var_info[] = {
     // @Param: DOCK_VELXY_MAX
-    // @DisplayName: Maximum Flight speed in Dock Mode
-    // @Description: Maximum Flight speed in Dock Mode
+    // @DisplayName: Maximum Flight speed in Dock Mode cm_s
+    // @Description: Maximum Flight speed in Dock Mode cm_s
     // @Range: 0 200
     // @User: Advanced
     AP_GROUPINFO("VEL_MAX", 1, ModeDock, dock_velxy_max, DOCK_VELXY_MAX_DEFAULT),
@@ -179,40 +179,56 @@ void ModeDock::run()
 
         if(g2.proximity.get_closest_object(yaw_to_obst_deg, dist_to_obst_m)){
             // YAW CONTROLLER //
-            /*Update the heading controller at a low rate (this is because the auto yaw controller uses
-            a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/ 
-            uint32_t cur_time_ms = millis();
-            if (cur_time_ms - last_update_ms > 200 || auto_yaw.reached_fixed_yaw_target()) {
-                last_update_ms = cur_time_ms;
-                yaw_to_obst_deg = wrap_180(yaw_to_obst_deg);
-                int8_t direction = (yaw_to_obst_deg >= 0 ? 1.0 : -1.0);
-                auto_yaw.set_fixed_yaw(abs(yaw_to_obst_deg), 0.0f, direction, true);
 
-                float heading_obst = ahrs.get_yaw() + yaw_to_obst_deg*DEG_TO_RAD;
-                sin_yaw_obst = sinf(heading_obst);
-                cos_yaw_obst = cosf(heading_obst);
+            float heading_obst = wrap_PI(ahrs.get_yaw() + yaw_to_obst_deg*DEG_TO_RAD);
+            sin_yaw_obst = sinf(heading_obst);
+            cos_yaw_obst = cosf(heading_obst);
 
-                Vector2f center_of_curvature;
-                int fit_type = g2.proximity.curvefit.compute_curvature_center(center_of_curvature);
-                GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "X:%f Y:%f Type: %i", center_of_curvature.x, center_of_curvature.y, fit_type);
-
+            //////////////////////////////////////////////////////////////////////////////////////////////////
+            // Curve Fit                                                                                    //
+            //////////////////////////////////////////////////////////////////////////////////////////////////
+            // Use curvefit to get an improved heading estimate
+            Vector2f curr_pos;
+            if(ahrs.get_relative_position_NE_home(curr_pos)){
+                g2.proximity.curvefit.get_target(yaw_to_obst_deg,dist_to_obst_m,curr_pos); //Get improved estimate
             }
-             heading_cmd = auto_yaw.get_heading();
+
+            // Use auto yaw only if yaw error is large //
+            if(yaw_to_obst_deg > 10.0){
+                /*Update the heading controller at a low rate (this is because the auto yaw controller uses
+                a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/ 
+                uint32_t cur_time_ms = millis();
+                if (cur_time_ms - last_update_ms > 200 || auto_yaw.reached_fixed_yaw_target()) {
+                    last_update_ms = cur_time_ms;
+                    yaw_to_obst_deg = wrap_180(yaw_to_obst_deg);
+                    int8_t direction = (yaw_to_obst_deg >= 0 ? 1.0 : -1.0);
+                    auto_yaw.set_fixed_yaw(abs(yaw_to_obst_deg), 0.0f, direction, true);
+                }
+            heading_cmd = auto_yaw.get_heading();
+            }
+            else{// If heading error is small directly use Attitude Controller 
+            heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
+            heading_cmd.yaw_angle_cd = heading_obst*RAD_TO_DEG*100.0f;
+            heading_cmd.yaw_rate_cds = 0.0;
+            }
+            //////////////////////////////////////////////////////////////////////////////////////////////////////
+
             // END YAW CONTROLLER //
 
             // POSITION CONTROLLER //
+
 
             if(!target_acquired){// Reacquired target so reset distance
                 distance_target = dist_to_obst_m * 100.0;
                 target_acquired=true;
                 GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Target Acquired");
             }
-            else{
+            else if(distance_target > dock_min_dist.get() || target_vel_xy.x < 0.0){
                 distance_target -= target_vel_xy.x*pos_control->get_dt();
             }
 
-
             double distance_err = dist_to_obst_m * 100.0 - distance_target;
+
 
 
             Vector2p dist_correction(
@@ -247,7 +263,6 @@ void ModeDock::run()
                 GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Target Lost");
             }
             target_acquired = false;
-            
 
             loiter_nav->update(); // false => don't run obstacle avoidance
 

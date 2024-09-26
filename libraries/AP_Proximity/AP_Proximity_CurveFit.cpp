@@ -1,37 +1,100 @@
 #include "AP_Proximity_CurveFit.h"
-
+#include <algorithm>
 #define LARGE_FLOAT 1.0e3
 
-int AP_Proximity_CurveFit::compute_curvature_center(Vector2f &center_curvature)
+void AP_Proximity_CurveFit::get_target(float &heading, float & distance, const Vector2f curr_pos)
 {
-    if(n < 1.0){
-        return 0;
+    if(!compute_curvature_center(curr_pos)){
+        return; // Unable to solve heading, distance
     }
-
-    if(n < 5.0){
-        solve_centroid(center_curvature);
-        center_curvature.x += x_ref;
-        center_curvature.y += y_ref;
-        return 1;
+    // Vector from vehicle position ro center of curvature;
+    Vector2f r_pos_center = center - curr_pos + reference_point;
+    switch (center_type)
+    {
+    case AP_Proximity_CurveFit::CenterType::POINT:
+    {
+        distance = r_pos_center.length();
+        heading = wrap_PI(r_pos_center.angle());
+        break;
     }
-
-    if(solve_circle(center_curvature)){
-        center_curvature.x += x_ref;
-        center_curvature.y += y_ref;
-        return 3;
+    case AP_Proximity_CurveFit::CenterType::CIRCLE_CONVEX:
+    {
+        distance = r_pos_center.length() - radius;
+        heading = wrap_PI(r_pos_center.angle());
+        break;
     }
-
-    if(solve_line(center_curvature)){
-        center_curvature.x += x_ref;
-        center_curvature.y += y_ref;
-        return 2;
+    case AP_Proximity_CurveFit::CenterType::CIRCLE_CONCAVE:
+    {
+        distance = -(r_pos_center.length()) + radius;
+        heading = wrap_PI((-r_pos_center).angle());
+        break;
     }
-
-    return 0;
+    case AP_Proximity_CurveFit::CenterType::LINE:
+    {
+        heading = wrap_PI(r_pos_center.angle());
+        Vector2f normal = Vector2f{r_pos_center};
+        normal.normalize();
+        distance = (closest_point - curr_pos).dot(normal);
+        break;
+    }
+    case AP_Proximity_CurveFit::CenterType::NONE:
+        FALLTHROUGH;
+    default:
+        break;
+    }
 
 }
 
-bool AP_Proximity_CurveFit::solve_circle(Vector2f &center)
+
+bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
+{
+    reference_point = Vector2f(reference);
+
+    if(center_type != AP_Proximity_CurveFit::CenterType::NONE){
+        // Nothing to do
+        return true;
+    }
+
+    if(data.size() < 1){ // No data
+        center_type = AP_Proximity_CurveFit::CenterType::NONE;
+        return false;
+    }
+    
+    filter_data();
+
+    if(data.size() <= 5){ // Treat as a single point
+        center_type = AP_Proximity_CurveFit::CenterType::POINT;
+        center = Vector2f(closest_point - reference_point);
+        radius = 0.0;
+        return true;
+    }
+
+    AP_Proximity_CurveFit::Coefficients coefficients;
+    compute_coefficients(coefficients);
+
+    if(solve_circle(coefficients)){
+        if((center).length() < radius){//origin is inside the circle
+            center_type = AP_Proximity_CurveFit::CenterType::CIRCLE_CONCAVE;
+        }
+        else{ //origin is outside the circle
+            center_type = AP_Proximity_CurveFit::CenterType::CIRCLE_CONVEX;
+        }
+        return true;
+    }
+
+    if(solve_line(coefficients)){//Try to fit a line
+        center_type = AP_Proximity_CurveFit::CenterType::LINE;
+        return true;
+    }
+
+    // All else fails, take the closest point
+    center = Vector2f(closest_point);
+    center_type = AP_Proximity_CurveFit::CenterType::POINT;
+    return true;
+
+}
+
+bool AP_Proximity_CurveFit::solve_circle(AP_Proximity_CurveFit::Coefficients c)
 {
 // Circle
 //
@@ -47,29 +110,37 @@ bool AP_Proximity_CurveFit::solve_circle(Vector2f &center)
 //
 
     // Check if there are a sufficient number of points
-    if (n < 4.0){
+    if (c.n < 4){
         return false;
     }
 
-    Matrix3d A = {{2*Sum_x2, 2*Sum_xy, Sum_x},
-                  {2*Sum_xy, 2*Sum_y2, Sum_y},
-                  {2*Sum_x,  2*Sum_y,  n    }};
+    Matrix3f A = {{2*c.Sum_x2, 2*c.Sum_xy, c.Sum_x},
+                  {2*c.Sum_xy, 2*c.Sum_y2, c.Sum_y},
+                  {2*c.Sum_x,  2*c.Sum_y,  float(c.n)}};
     
-    Matrix3d Ainv;
-    // Check if the problem is singular
+    if(A.det() < (1/flatness_threshold)){
+        return false;
+    }
+
+    Matrix3f Ainv;
     if(!A.inverse(Ainv)){
         return false;
-    }
+    };
 
-    Vector3d B = {Sum_x3 + Sum_xy2, Sum_yx2 + Sum_y3, Sum_x2 + Sum_y2};
+    Vector3f B = {c.Sum_x3 + c.Sum_xy2, c.Sum_yx2 + c.Sum_y3, c.Sum_x2 + c.Sum_y2};
 
-    Vector3d solution = Ainv*B;
+    Vector3f solution = Ainv*B;
     center.x = solution.x;
     center.y = solution.y;
+    float radius_squared = solution.z + solution.x*solution.x +solution.y*solution.y;
+    if(radius_squared <= 0.0){
+        return false;
+    }
+    radius = sqrtf(radius_squared);
     return true;
 }
 
-bool AP_Proximity_CurveFit::solve_line(Vector2f &normal)
+bool AP_Proximity_CurveFit::solve_line(AP_Proximity_CurveFit::Coefficients c)
 {
 // Line
 //
@@ -82,66 +153,112 @@ bool AP_Proximity_CurveFit::solve_line(Vector2f &normal)
 //     |Sum(yk)|
 //     
     // Check if there are a sufficient number of points
-    if (n < 3.0){
+    if (c.n < 3){
         return false;
     }
 
-    float det = Sum_x2 * Sum_y2 - Sum_xy * Sum_xy; 
+    float det = c.Sum_x2 * c.Sum_y2 - c.Sum_xy * c.Sum_xy; 
 
     if (abs(det) < 1e-6){
         return false;
     }
 
-    normal.x = (Sum_y2*Sum_x - Sum_xy*Sum_y)/det;
-    normal.y = (Sum_x2*Sum_y - Sum_xy*Sum_x)/det;
+    center.x = (c.Sum_y2*c.Sum_x - c.Sum_xy*c.Sum_y)/det;
+    center.y = (c.Sum_x2*c.Sum_y - c.Sum_xy*c.Sum_x)/det;
 
-    normal.normalize();
+    center.normalize();
+    center = center*LARGE_FLOAT;
+    radius = LARGE_FLOAT;
     return true;
 }
 
-void AP_Proximity_CurveFit::solve_centroid(Vector2f &centroid)
+
+void AP_Proximity_CurveFit::add_point(float angle, float distance, Vector2f current_position, float yaw)
 {
-    centroid.x = Sum_x/n;
-    centroid.y = Sum_y/n;
+    float angle_deg = wrap_180(angle*RAD_TO_DEG);
+    if( angle_deg < angle_max_deg && angle_deg > angle_min_deg)
+    {
+        PrxData point;
+        point.position.x = distance*cosf(angle+yaw) + current_position.x;
+        point.position.y = distance*sinf(angle+yaw) + current_position.y;
+        point.distance = distance;
+        data.push_back(point);
+    }
+}
+
+void AP_Proximity_CurveFit::filter_data()
+{
+    // Find the closest point
+    auto closest_data = std::min_element(data.begin(), data.end(),
+    [](const PrxData a, const PrxData b)->bool {return a.distance<b.distance;});
+    closest_point = Vector2f(closest_data->position);
+
+    // Check for discontinuity and truncate data 
+    std::vector<AP_Proximity_CurveFit::PrxData>::iterator it;
+    for(it = closest_data; it!= data.end(); it++){
+        if(abs((it+1)->distance - it->distance) > discontinuity_threshold){
+            data.erase(it+1,data.end());
+            break;
+        }
+    }
+    int index = 0;
+    for(it = closest_data; it!= data.begin(); it--){
+        if(abs((it-1)->distance - it->distance) > discontinuity_threshold){
+            data.erase(data.begin(),it);
+            closest_data = data.begin() + index;
+            break;
+        }
+        index++;
+    }
+    // Check if the min_distance is a corner
+    if(index > 2 && data.size()-index > 2){
+        // Using the 3-point endpoint approximation for the derivative
+        float fwd = 0.5*(-3*closest_data->distance + 4*(closest_data+1)->distance - (closest_data+2)->distance);
+        float bkd = 0.5*(3*closest_data->distance - 4*(closest_data-1)->distance + (closest_data-2)->distance);
+
+        // If the closest point is a corner remove all other points and return
+        if(fwd - bkd > corner_threshold){
+            data.erase(closest_data+1,data.end());
+            data.erase(data.begin(),closest_data);
+        }
+        return;
+    }
+
+    // Check if the closest point is at the end of a data set
+    if(index <= 2){
+        data.erase(closest_data+1, data.end());
+        return;
+    }
+    else if(data.size()-index <= 2){
+        data.erase(data.begin(),closest_data);
+        return;
+    }
+
+return;
 }
 
 
-void AP_Proximity_CurveFit::add_point(float angle, float distance, Vector3f current_position, float yaw)
-{
-
-    if (n < 1.0){
-        x_ref = current_position.x;
-        y_ref = current_position.y;
+void AP_Proximity_CurveFit::compute_coefficients(AP_Proximity_CurveFit::Coefficients &c)
+{   
+    std::vector<PrxData>::iterator it;
+    for(it = data.begin(); it != data.end(); ++it){
+        float x = it->position.x - reference_point.x;
+        float y = it->position.y - reference_point.y;
+        c.Sum_x += x;
+        c.Sum_y += y;
+        c.Sum_x2 += x*x;
+        c.Sum_xy += x*y;
+        c.Sum_y2 += y*y;
+        c.Sum_xy2 += x*y*y;
+        c.Sum_yx2 += y*x*x;
+        c.Sum_x3 += x*x*x;
+        c.Sum_y3 += y*y*y;
+        c.n += 1;
     }
-
-    double x = distance*cosf(angle+yaw) + current_position.x - x_ref;
-    double y = distance*sinf(angle+yaw) + current_position.y - y_ref;
-
-    n += 1.0;
-    Sum_x += x;
-    Sum_y += y;
-    Sum_x2 += x*x;
-    Sum_xy += x*y;
-    Sum_y2 += y*y;
-    Sum_xy2 += x*y*y;
-    Sum_yx2 += y*x*x;
-    Sum_x3 += x*x*x;
-    Sum_y3 += y*y*y;
 }
 
 void AP_Proximity_CurveFit::reset()
 {
-    n = 0.0;
-    Sum_x = 0.0;
-    Sum_y = 0.0;
-    Sum_x2 = 0.0;
-    Sum_xy = 0.0;
-    Sum_y2 = 0.0;
-    Sum_xy2 = 0.0;
-    Sum_yx2 += 0.0;
-    Sum_x3 += 0.0;
-    Sum_y3 += 0.0;
-
-    x_ref = 0.0;
-    y_ref = 0.0;
+    data.clear();
+    center_type = AP_Proximity_CurveFit::CenterType::NONE;
 }
