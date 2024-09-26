@@ -24,6 +24,7 @@
 #include <GCS_MAVLink/GCS_MAVLink.h>
 #include "AP_Proximity_Params.h"
 #include "AP_Proximity_Boundary_3D.h"
+#include "AP_Proximity_CurveFit.h"
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
 #include <AP_HAL/Semaphores.h>
@@ -200,6 +201,13 @@ public:
 
     // 3D boundary
     AP_Proximity_Boundary_3D boundary;
+
+    ///////////////////////////////////////////////////////////////////////////////////
+    // Curve Fit
+    ///////////////////////////////////////////////////////////////////////////////////
+    AP_Proximity_CurveFit curvefit; //Copy of curve_fit that is used for computation
+    AP_Proximity_CurveFit _curvefit; //Copy of curve_fit that is filled with data
+    ///////////////////////////////////////////////////////////////////////////////////
 
     // Check if Obstacle defined by body-frame yaw and pitch is near ground
     bool check_obstacle_near_ground(float pitch, float yaw, float distance) const;

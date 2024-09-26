@@ -2,9 +2,34 @@
 
 #if MODE_DOCK_ENABLED == ENABLED
 
+#define DOCK_VELXY_MAX_DEFAULT 200.0
+#define DOCK_MIN_DIST_DEFAULT 100.0
+
 /*
- * Init and run calls for loiter flight mode
+ * Init and run calls for dock flight mode
  */
+
+const AP_Param::GroupInfo ModeDock::var_info[] = {
+    // @Param: DOCK_VELXY_MAX
+    // @DisplayName: Maximum Flight speed in Dock Mode cm_s
+    // @Description: Maximum Flight speed in Dock Mode cm_s
+    // @Range: 0 200
+    // @User: Advanced
+    AP_GROUPINFO("VEL_MAX", 1, ModeDock, dock_velxy_max, DOCK_VELXY_MAX_DEFAULT),
+
+    // @Param: DOCK_MIN_DIST
+    // @DisplayName: Minimum distance to target
+    // @Description: Minimum distance to target
+    // @Range: 0 50
+    // @User: Advanced
+    AP_GROUPINFO("MIN_DIST", 2, ModeDock, dock_min_dist, DOCK_MIN_DIST_DEFAULT),
+    AP_GROUPEND
+};
+
+ModeDock::ModeDock(void) : Mode()
+{
+    AP_Param::setup_object_defaults(this, var_info);
+}
 
 // loiter_init - initialise loiter controller
 bool ModeDock::init(bool ignore_checks)
@@ -44,50 +69,11 @@ bool ModeDock::init(bool ignore_checks)
     target_acquired = false;
     distance_target = 3.0;
 
-#if AC_PRECLAND_ENABLED
-    _precision_loiter_active = false;
-#endif
+    // Get Params
+    dock_velxy_max.load();
 
     return true;
 }
-
-#if AC_PRECLAND_ENABLED
-bool ModeDock::do_precision_loiter()
-{
-    if (!_precision_loiter_enabled) {
-        return false;
-    }
-    if (copter.ap.land_complete_maybe) {
-        return false;        // don't move on the ground
-    }
-    // if the pilot *really* wants to move the vehicle, let them....
-    if (loiter_nav->get_pilot_desired_acceleration().length() > 50.0f) {
-        return false;
-    }
-    if (!copter.precland.target_acquired()) {
-        return false; // we don't have a good vector
-    }
-    return true;
-}
-
-void ModeDock::precision_loiter_xy()
-{
-    loiter_nav->clear_pilot_desired_acceleration();
-    Vector2f target_pos, target_vel;
-    if (!copter.precland.get_target_position_cm(target_pos)) {
-        target_pos = inertial_nav.get_position_xy_cm();
-    }
-    // get the velocity of the target
-    copter.precland.get_target_velocity_cms(inertial_nav.get_velocity_xy_cms(), target_vel);
-
-    Vector2f zero;
-    Vector2p landing_pos = target_pos.topostype();
-    // target vel will remain zero if landing target is stationary
-    pos_control->input_pos_vel_accel_xy(landing_pos, target_vel, zero);
-    // run pos controller
-    pos_control->update_xy_controller();
-}
-#endif
 
 // loiter_run - runs the loiter controller
 // should be called at 100hz or more
@@ -113,9 +99,9 @@ void ModeDock::run()
         // apply SIMPLE mode transform to pilot inputs
         //update_simple_mode(); //Disable simple mode
 
-        // convert pilot input to lean angles
+        // convert pilot input to lean angles TODO: change to get_pilot_desired_vel()
         get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
-
+        
         // process pilot's roll and pitch input
         loiter_nav->set_pilot_desired_acceleration(target_roll, target_pitch);
 
@@ -136,10 +122,10 @@ void ModeDock::run()
     }
 
     // Loiter State Machine Determination
-    AltHoldModeState dock_state = get_alt_hold_state(target_climb_rate);
+    AltHoldModeState flight_state = get_alt_hold_state(target_climb_rate);
 
     // Loiter State Machine
-    switch (dock_state) {
+    switch (flight_state) {
 
     case AltHoldModeState::MotorStopped:
         attitude_control->reset_rate_controller_I_terms();
@@ -175,8 +161,7 @@ void ModeDock::run()
         takeoff.do_pilot_takeoff(target_climb_rate);
 
         // run loiter controller
-        loiter_nav->update(false); // false => don't run obstacle avoidance
-
+        loiter_nav->update();
         // call attitude controller
         attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
         target_acquired = false;
@@ -186,6 +171,7 @@ void ModeDock::run()
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
         AC_AttitudeControl::HeadingCommand heading_cmd;
+        Vector2f target_vel_xy = get_pilot_desired_velocity_xy(dock_velxy_max.get());
         // Get Yaw angle and distance to closest object from AP_Proximity
         float yaw_to_obst_deg;
         float dist_to_obst_m;
@@ -193,41 +179,56 @@ void ModeDock::run()
 
         if(g2.proximity.get_closest_object(yaw_to_obst_deg, dist_to_obst_m)){
             // YAW CONTROLLER //
-            /*Update the heading controller at a low rate (this is because the auto yaw controller uses
-            a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/ 
-            uint32_t cur_time_ms = millis();
-            if (cur_time_ms - last_update_ms > 200 || auto_yaw.reached_fixed_yaw_target()) {
-                last_update_ms = cur_time_ms;
-                yaw_to_obst_deg = wrap_180(yaw_to_obst_deg);
-                int8_t direction = (yaw_to_obst_deg >= 0 ? 1.0 : -1.0);
-                auto_yaw.set_fixed_yaw(abs(yaw_to_obst_deg), 0.0f, direction, true);
 
-                //GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "X:%f Y:%f Z: %f", targ[0], targ[1], targ[2]);
+            float heading_obst = wrap_PI(ahrs.get_yaw() + yaw_to_obst_deg*DEG_TO_RAD);
+            sin_yaw_obst = sinf(heading_obst);
+            cos_yaw_obst = cosf(heading_obst);
 
-                float heading_obst = ahrs.get_yaw() + yaw_to_obst_deg*DEG_TO_RAD;
-                sin_yaw_obst = sinf(heading_obst);
-                cos_yaw_obst = cosf(heading_obst);
-                
-                
+            //////////////////////////////////////////////////////////////////////////////////////////////////
+            // Curve Fit                                                                                    //
+            //////////////////////////////////////////////////////////////////////////////////////////////////
+            // Use curvefit to get an improved heading estimate
+            Vector2f curr_pos;
+            if(ahrs.get_relative_position_NE_home(curr_pos)){
+                g2.proximity.curvefit.get_target(yaw_to_obst_deg,dist_to_obst_m,curr_pos); //Get improved estimate
             }
-             heading_cmd = auto_yaw.get_heading();
+
+            // Use auto yaw only if yaw error is large //
+            if(yaw_to_obst_deg > 10.0){
+                /*Update the heading controller at a low rate (this is because the auto yaw controller uses
+                a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/ 
+                uint32_t cur_time_ms = millis();
+                if (cur_time_ms - last_update_ms > 200 || auto_yaw.reached_fixed_yaw_target()) {
+                    last_update_ms = cur_time_ms;
+                    yaw_to_obst_deg = wrap_180(yaw_to_obst_deg);
+                    int8_t direction = (yaw_to_obst_deg >= 0 ? 1.0 : -1.0);
+                    auto_yaw.set_fixed_yaw(abs(yaw_to_obst_deg), 0.0f, direction, true);
+                }
+            heading_cmd = auto_yaw.get_heading();
+            }
+            else{// If heading error is small directly use Attitude Controller 
+            heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
+            heading_cmd.yaw_angle_cd = heading_obst*RAD_TO_DEG*100.0f;
+            heading_cmd.yaw_rate_cds = 0.0;
+            }
+            //////////////////////////////////////////////////////////////////////////////////////////////////////
+
             // END YAW CONTROLLER //
 
             // POSITION CONTROLLER //
-            float vel_fw = -0.1f * target_pitch; //Forward Velocity Command
-            float vel_rt =  0.1f * target_roll; //Right Velocity Command
+
 
             if(!target_acquired){// Reacquired target so reset distance
                 distance_target = dist_to_obst_m * 100.0;
                 target_acquired=true;
                 GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Target Acquired");
             }
-            else{
-                distance_target -= vel_fw*pos_control->get_dt();
+            else if(distance_target > dock_min_dist.get() || target_vel_xy.x < 0.0){
+                distance_target -= target_vel_xy.x*pos_control->get_dt();
             }
 
-
             double distance_err = dist_to_obst_m * 100.0 - distance_target;
+
 
 
             Vector2p dist_correction(
@@ -242,8 +243,8 @@ void ModeDock::run()
             target_pos = target_pos + dist_correction;
 
             Vector2f target_vel(
-                -vel_rt*sin_yaw_obst,
-                vel_rt*cos_yaw_obst
+                -target_vel_xy.y*sin_yaw_obst,
+                target_vel_xy.y*cos_yaw_obst
             );
 
             Vector2f zero;
@@ -258,31 +259,13 @@ void ModeDock::run()
         }else{
             heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Rate_Only;
             heading_cmd.yaw_rate_cds = target_yaw_rate;
+            if(target_acquired){
+                GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Target Lost");
+            }
             target_acquired = false;
-            GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Target Lost");
-            
-        
 
+            loiter_nav->update(); // false => don't run obstacle avoidance
 
-#if AC_PRECLAND_ENABLED
-            bool precision_loiter_old_state = _precision_loiter_active;
-            if (do_precision_loiter()) {
-                precision_loiter_xy();
-                _precision_loiter_active = true;
-            } else {
-                _precision_loiter_active = false;
-            }
-            if (precision_loiter_old_state && !_precision_loiter_active) {
-                // prec loiter was active, not any more, let's init again as user takes control
-                loiter_nav->init_target();
-            }
-            // run loiter controller if we are not doing prec loiter
-            if (!_precision_loiter_active) {
-                loiter_nav->update(false); // false => don't run obstacle avoidance
-            }
-#else
-            loiter_nav->update(false); // false => don't run obstacle avoidance
-#endif
 
             thrust_vector = loiter_nav->get_thrust_vector();
         }

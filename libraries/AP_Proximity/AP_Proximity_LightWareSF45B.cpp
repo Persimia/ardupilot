@@ -154,6 +154,21 @@ void AP_Proximity_LightWareSF45B::process_message()
                 // mark previous face invalid
                 frontend.boundary.reset_face(_face, state.instance);
             }
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////
+        // curve fit
+        ///////////////////////////////////////////////////////////////////////////////////////////////////
+        // TODO: Generalize to user specified min and max angle.
+            if (face.sector == 0){
+                // if switching into sector 0
+                frontend._curvefit.reset(); //reset _curvefit to accept new data. 
+            }
+            if (_face.sector == 0){
+                // if switching out of sector 0 copy data to curvefit
+                frontend.curvefit = AP_Proximity_CurveFit{frontend._curvefit};
+            }
+        // end curve fit ////////////////////////////////////////////////////////////////////////////////////
+
             // record updated face
             _face = face;
             _face_yaw_deg = 0;
@@ -182,6 +197,15 @@ void AP_Proximity_LightWareSF45B::process_message()
                 _face_distance = distance_m;
                 _face_distance_valid = true;
             }
+
+            //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // curve fit
+            //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // TODO: Generalize to use user configured min and max angle 
+            if(face.sector == 0) {
+                curvefit_push(angle_deg * DEG_TO_RAD, distance_m); //add data
+            }
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             // update shortest distance for this mini sector
             if (distance_m < _minisector_distance) {

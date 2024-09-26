@@ -146,3 +146,20 @@ void AP_Proximity_Backend::database_push(float angle, float pitch, float distanc
 }
 
 #endif // HAL_PROXIMITY_ENABLED
+
+
+////////////////////////////////////////////////////////////////////////
+// Curve fit
+////////////////////////////////////////////////////////////////////////
+
+void AP_Proximity_Backend::curvefit_push(float angle, float distance)
+{
+    Vector2f current_pos;
+    if(AP::ahrs().get_relative_position_NE_origin(current_pos)){
+        float yaw = AP::ahrs().get_yaw();
+        frontend._curvefit.add_point(angle, distance, current_pos, yaw);
+    };
+        
+}
+
+/////////////////////////////////////////////////////////////////////////
