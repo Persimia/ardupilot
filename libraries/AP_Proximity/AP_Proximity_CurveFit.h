@@ -2,7 +2,8 @@
 
 #include <AP_Common/AP_Common.h>
 #include <AP_Math/AP_Math.h>
-#include <vector>
+
+#define CURVEFIT_DATA_LEN 50
 
 class AP_Proximity_CurveFit
 {
@@ -67,8 +68,9 @@ private:
     // set center and radius properties
     bool solve_line(const AP_Proximity_CurveFit::Coefficients c);
 
-
-    std::vector<PrxData> data;
+    PrxData data[CURVEFIT_DATA_LEN];
+    int data_start = 0;
+    int data_end = 0;
     Vector2f reference_point; // coordinates in global frame of fit origin.
     Vector2f closest_point; // closest point in global frame of closest point.
     Vector2f center; // coordinates in fit frame of center. For a circle this is the center. For a line this is a vector alligned with normal.

@@ -55,14 +55,14 @@ bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
         return true;
     }
 
-    if(data.size() < 1){ // No data
+    if(data_end-data_start < 1){ // No data
         center_type = AP_Proximity_CurveFit::CenterType::NONE;
         return false;
     }
     
     filter_data();
 
-    if(data.size() <= 5){ // Treat as a single point
+    if(data_end-data_start <= 5){ // Treat as a single point
         center_type = AP_Proximity_CurveFit::CenterType::POINT;
         center = Vector2f(closest_point - reference_point);
         radius = 0.0;
@@ -176,61 +176,60 @@ bool AP_Proximity_CurveFit::solve_line(AP_Proximity_CurveFit::Coefficients c)
 void AP_Proximity_CurveFit::add_point(float angle, float distance, Vector2f current_position, float yaw)
 {
     float angle_deg = wrap_180(angle*RAD_TO_DEG);
-    if( angle_deg < angle_max_deg && angle_deg > angle_min_deg)
+    if( angle_deg < angle_max_deg && angle_deg > angle_min_deg && data_end < CURVEFIT_DATA_LEN)
     {
         PrxData point;
         point.position.x = distance*cosf(angle+yaw) + current_position.x;
         point.position.y = distance*sinf(angle+yaw) + current_position.y;
         point.distance = distance;
-        data.push_back(point);
+        data[data_end] = point;
+        data_end += 1;
     }
 }
 
 void AP_Proximity_CurveFit::filter_data()
 {
     // Find the closest point
-    auto closest_data = std::min_element(data.begin(), data.end(),
+    auto closest_data = std::min_element(data, data+data_end,
     [](const PrxData a, const PrxData b)->bool {return a.distance<b.distance;});
     closest_point = Vector2f(closest_data->position);
 
     // Check for discontinuity and truncate data 
-    std::vector<AP_Proximity_CurveFit::PrxData>::iterator it;
-    for(it = closest_data; it!= data.end(); it++){
+    PrxData* it;
+    for(it = closest_data; it!= data+(data_end-1); it++){
         if(abs((it+1)->distance - it->distance) > discontinuity_threshold){
-            data.erase(it+1,data.end());
+            data_end = (it+1) - data;
             break;
         }
     }
-    int index = 0;
-    for(it = closest_data; it!= data.begin(); it--){
+    
+    for(it = closest_data; it!= data; it--){
         if(abs((it-1)->distance - it->distance) > discontinuity_threshold){
-            data.erase(data.begin(),it);
-            closest_data = data.begin() + index;
+            data_start = it-data;
             break;
         }
-        index++;
     }
     // Check if the min_distance is a corner
-    if(index > 2 && data.size()-index > 2){
+    if(closest_data - (data+data_start) > 2 && (data+data_end) - closest_data > 2){
         // Using the 3-point endpoint approximation for the derivative
         float fwd = 0.5*(-3*closest_data->distance + 4*(closest_data+1)->distance - (closest_data+2)->distance);
         float bkd = 0.5*(3*closest_data->distance - 4*(closest_data-1)->distance + (closest_data-2)->distance);
 
         // If the closest point is a corner remove all other points and return
         if(fwd - bkd > corner_threshold){
-            data.erase(closest_data+1,data.end());
-            data.erase(data.begin(),closest_data);
+            data_start = closest_data - data;
+            data_end = data_start+1;
         }
         return;
     }
 
     // Check if the closest point is at the end of a data set
-    if(index <= 2){
-        data.erase(closest_data+1, data.end());
+    if(closest_data - (data+data_start) <= 2){
+        data_end = data_start+2;
         return;
     }
-    else if(data.size()-index <= 2){
-        data.erase(data.begin(),closest_data);
+    else if((data+data_end) - closest_data <= 2){
+        data_start = data_end-2;
         return;
     }
 
@@ -240,10 +239,9 @@ return;
 
 void AP_Proximity_CurveFit::compute_coefficients(AP_Proximity_CurveFit::Coefficients &c)
 {   
-    std::vector<PrxData>::iterator it;
-    for(it = data.begin(); it != data.end(); ++it){
-        float x = it->position.x - reference_point.x;
-        float y = it->position.y - reference_point.y;
+    for(int it = data_start; it < data_end; it++){
+        float x = data[it].position.x - reference_point.x;
+        float y = data[it].position.y - reference_point.y;
         c.Sum_x += x;
         c.Sum_y += y;
         c.Sum_x2 += x*x;
@@ -259,6 +257,7 @@ void AP_Proximity_CurveFit::compute_coefficients(AP_Proximity_CurveFit::Coeffici
 
 void AP_Proximity_CurveFit::reset()
 {
-    data.clear();
+    data_end = 0;
+    data_start = 0;
     center_type = AP_Proximity_CurveFit::CenterType::NONE;
 }
