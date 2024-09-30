@@ -686,8 +686,13 @@ public:
     AP_Float pldp_delay_s;
     AP_Float pldp_descent_speed_ms;
 
+#if MODE_LOITER_ASSISTED_ENABLED == ENABLED
     void *mode_loiter_assisted_ptr;
+#endif
+
+#if MODE_DOCK_ENABLED == ENABLED
     void *mode_dock_ptr;
+#endif    
 };
 
 extern const AP_Param::Info        var_info[];
