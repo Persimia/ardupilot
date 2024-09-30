@@ -1,9 +1,10 @@
 #pragma once
-
+#include "AP_Proximity_config.h"
 #include <AP_Common/AP_Common.h>
 #include <AP_Math/AP_Math.h>
 #include <vector>
 
+#if AP_PROXIMITY_CURVEFIT_ENABLED == 1
 class AP_Proximity_CurveFit
 {
     typedef struct{
@@ -81,3 +82,5 @@ private:
     float angle_min_deg{-22.5}; //TODO Make this a parameter
     float angle_max_deg{22.5}; //TODO Make this a parameter
 };
+
+#endif

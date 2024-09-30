@@ -1232,13 +1232,17 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @User: Advanced
     AP_GROUPINFO("FS_EKF_FILT", 8, ParametersG2, fs_ekf_filt_hz, FS_EKF_FILT_DEFAULT),
 
+#if MODE_LOITER_ASSISTED_ENABLED == ENABLED
     // @Group: LASS_
     // @Path: mode_loiter_assisted.cpp
     AP_SUBGROUPPTR(mode_loiter_assisted_ptr, "LASS_", 9, ParametersG2, ModeLoiterAssisted),
+#endif
 
+#if MODE_DOCK_ENABLED == ENABLED
     // @Group: DOCK_
     // @Path: mode_dock.cpp
     AP_SUBGROUPPTR(mode_dock_ptr, "DOCK_", 10, ParametersG2, ModeDock),
+#endif
 
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 
@@ -1301,8 +1305,14 @@ ParametersG2::ParametersG2(void)
 #if WEATHERVANE_ENABLED == ENABLED
     ,weathervane()
 #endif
+
+#if MODE_LOITER_ASSISTED_ENABLED == ENABLED
     ,mode_loiter_assisted_ptr(&copter.mode_loiter_assisted)
+#endif
+
+#if MODE_DOCK_ENABLED == ENABLED
     ,mode_dock_ptr(&copter.mode_dock)
+#endif
 {
     AP_Param::setup_object_defaults(this, var_info);
     AP_Param::setup_object_defaults(this, var_info2);
