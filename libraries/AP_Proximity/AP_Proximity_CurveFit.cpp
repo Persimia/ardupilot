@@ -2,6 +2,7 @@
 #include <algorithm>
 #define LARGE_FLOAT 1.0e3
 
+#if AP_PROXIMITY_CURVEFIT_ENABLED == 1
 void AP_Proximity_CurveFit::get_target(float &heading, float & distance, const Vector2f curr_pos)
 {
     if(!compute_curvature_center(curr_pos)){
@@ -261,3 +262,5 @@ void AP_Proximity_CurveFit::reset()
     data_start = 0;
     center_type = AP_Proximity_CurveFit::CenterType::NONE;
 }
+
+#endif

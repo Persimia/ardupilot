@@ -151,7 +151,7 @@ void AP_Proximity_Backend::database_push(float angle, float pitch, float distanc
 ////////////////////////////////////////////////////////////////////////
 // Curve fit
 ////////////////////////////////////////////////////////////////////////
-
+#if AP_PROXIMITY_CURVEFIT_ENABLED == 1
 void AP_Proximity_Backend::curvefit_push(float angle, float distance)
 {
     Vector2f current_pos;
@@ -161,5 +161,6 @@ void AP_Proximity_Backend::curvefit_push(float angle, float distance)
     };
         
 }
+#endif
 
 /////////////////////////////////////////////////////////////////////////

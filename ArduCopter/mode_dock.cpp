@@ -188,10 +188,12 @@ void ModeDock::run()
             // Curve Fit                                                                                    //
             //////////////////////////////////////////////////////////////////////////////////////////////////
             // Use curvefit to get an improved heading estimate
+#if AP_PROXIMITY_CURVEFIT_ENABLED == 1
             Vector2f curr_pos;
             if(ahrs.get_relative_position_NE_home(curr_pos)){
                 g2.proximity.curvefit.get_target(yaw_to_obst_deg,dist_to_obst_m,curr_pos); //Get improved estimate
             }
+#endif
 
             // Use auto yaw only if yaw error is large //
             if(yaw_to_obst_deg > 10.0){
