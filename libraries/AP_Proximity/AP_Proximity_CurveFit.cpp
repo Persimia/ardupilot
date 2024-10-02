@@ -1,4 +1,5 @@
 #include "AP_Proximity_CurveFit.h"
+#include <AP_Logger/AP_Logger.h>
 #include <algorithm>
 #define LARGE_FLOAT 1.0e3
 
@@ -8,7 +9,7 @@ void AP_Proximity_CurveFit::get_target(float &heading, float & distance, const V
     if(!compute_curvature_center(curr_pos)){
         return; // Unable to solve heading, distance
     }
-    // Vector from vehicle position ro center of curvature;
+    // Vector from vehicle position to center of curvature;
     Vector2f r_pos_center = center - curr_pos + reference_point;
     switch (center_type)
     {
@@ -41,15 +42,16 @@ void AP_Proximity_CurveFit::get_target(float &heading, float & distance, const V
     case AP_Proximity_CurveFit::CenterType::NONE:
         FALLTHROUGH;
     default:
-        break;
+        return;
     }
+
+    log_target(heading,distance);
 
 }
 
 
 bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
 {
-    reference_point = Vector2f(reference);
 
     if(center_type != AP_Proximity_CurveFit::CenterType::NONE){
         // Nothing to do
@@ -61,12 +63,14 @@ bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
         return false;
     }
     
+    reference_point = Vector2f(reference);
     filter_data();
 
     if(data_end-data_start <= 5){ // Treat as a single point
         center_type = AP_Proximity_CurveFit::CenterType::POINT;
         center = Vector2f(closest_point - reference_point);
         radius = 0.0;
+        log_fit();
         return true;
     }
 
@@ -80,17 +84,20 @@ bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
         else{ //origin is outside the circle
             center_type = AP_Proximity_CurveFit::CenterType::CIRCLE_CONVEX;
         }
+        log_fit();
         return true;
     }
 
     if(solve_line(coefficients)){//Try to fit a line
         center_type = AP_Proximity_CurveFit::CenterType::LINE;
+        log_fit();
         return true;
     }
 
     // All else fails, take the closest point
-    center = Vector2f(closest_point);
+    center = Vector2f(closest_point-reference_point);
     center_type = AP_Proximity_CurveFit::CenterType::POINT;
+    log_fit();
     return true;
 
 }
@@ -262,5 +269,38 @@ void AP_Proximity_CurveFit::reset()
     data_start = 0;
     center_type = AP_Proximity_CurveFit::CenterType::NONE;
 }
+
+void AP_Proximity_CurveFit::log_fit()
+{
+    if(center_type == NONE){
+    // return if there is no valid fit
+        return;
+    }
+    Vector2f GlobalCenter = center+reference_point;
+    AP::logger().Write("CFIT","TimeUS,Typ,CX,CY,R","s-mmm","F-000","QBfff",
+                        AP_HAL::micros64(),
+                        uint8_t(center_type),
+                        GlobalCenter.x,
+                        GlobalCenter.y,
+                        radius
+    );
+}
+
+void AP_Proximity_CurveFit::log_target(const float heading, const float distance)
+{
+    if(center_type == NONE){
+    // return id there is no valid fit
+        return;
+    }
+    
+    struct log_Proximity_Cfit_Target pkt = {
+        LOG_PACKET_HEADER_INIT(LOG_PROXIMITY_CFIT_TGT_MSG),
+        time_us        :  AP_HAL::micros64(),
+        target_heading :  heading*RAD_TO_DEG,
+        target_distance:  distance
+    };
+    AP::logger().WriteBlock(&pkt, sizeof(pkt));
+}
+
 
 #endif

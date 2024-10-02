@@ -46,6 +46,12 @@ public:
     // Clear the data vector and set fit_type to NONE.
     void reset();
 
+    // Log the current state
+    void log_fit();
+
+    // Log the heading and distance
+    void log_target(const float heading, const float distance);
+
 private:
 
     // Return true if fit was successful given a reference point.

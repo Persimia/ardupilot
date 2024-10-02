@@ -173,6 +173,7 @@ void ModeDock::run()
         AC_AttitudeControl::HeadingCommand heading_cmd;
         Vector2f target_vel_xy = get_pilot_desired_velocity_xy(dock_velxy_max.get());
         // Get Yaw angle and distance to closest object from AP_Proximity
+        float yaw_attitude = ahrs.get_yaw();
         float yaw_to_obst_deg;
         float dist_to_obst_m;
         Vector3f thrust_vector;
@@ -180,9 +181,7 @@ void ModeDock::run()
         if(g2.proximity.get_closest_object(yaw_to_obst_deg, dist_to_obst_m)){
             // YAW CONTROLLER //
 
-            float heading_obst = wrap_PI(ahrs.get_yaw() + yaw_to_obst_deg*DEG_TO_RAD);
-            sin_yaw_obst = sinf(heading_obst);
-            cos_yaw_obst = cosf(heading_obst);
+            float heading_obst = wrap_PI(yaw_attitude + yaw_to_obst_deg*DEG_TO_RAD);
 
             //////////////////////////////////////////////////////////////////////////////////////////////////
             // Curve Fit                                                                                    //
@@ -190,13 +189,16 @@ void ModeDock::run()
             // Use curvefit to get an improved heading estimate
 #if AP_PROXIMITY_CURVEFIT_ENABLED == 1
             Vector2f curr_pos;
-            if(ahrs.get_relative_position_NE_home(curr_pos)){
-                g2.proximity.curvefit.get_target(yaw_to_obst_deg,dist_to_obst_m,curr_pos); //Get improved estimate
+            if(ahrs.get_relative_position_NE_origin(curr_pos)){
+                g2.proximity.curvefit.get_target(heading_obst,dist_to_obst_m,curr_pos); //Get improved estimate
             }
 #endif
 
+            sin_yaw_obst = sinf(heading_obst);
+            cos_yaw_obst = cosf(heading_obst);
+
             // Use auto yaw only if yaw error is large //
-            if(yaw_to_obst_deg > 10.0){
+            if(abs(yaw_to_obst_deg) > 22.5){
                 /*Update the heading controller at a low rate (this is because the auto yaw controller uses
                 a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/ 
                 uint32_t cur_time_ms = millis();
