@@ -117,10 +117,19 @@ const AP_Param::GroupInfo AP_Proximity::var_info[] = {
     AP_SUBGROUPVARPTR(drivers[3], "4_",  29, AP_Proximity, backend_var_info[3]),
 #endif
 
+#if AP_PROXIMITY_CURVEFIT_ENABLED
+    // @Group: _CFIT
+    // @Path: AP_Proximity_CurveFit.cpp
+    AP_SUBGROUPVARPTR(curvefit,"_CFIT", 30, AP_Proximity, curvefit_var_info),
+#endif
+
     AP_GROUPEND
 };
 
 const AP_Param::GroupInfo *AP_Proximity::backend_var_info[PROXIMITY_MAX_INSTANCES];
+#if AP_PROXIMITY_CURVEFIT_ENABLED
+const AP_Param::GroupInfo *AP_Proximity::curvefit_var_info;
+#endif
 
 AP_Proximity::AP_Proximity()
 {
@@ -270,6 +279,13 @@ void AP_Proximity::init()
             AP_Param::load_object_from_eeprom(drivers[instance], backend_var_info[instance]);
         }
     }
+
+#if AP_PROXIMITY_CURVEFIT_ENABLED
+        curvefit = NEW_NOTHROW AP_Proximity_CurveFit();
+        curvefit_var_info = curvefit->var_info;
+        AP_Param::load_object_from_eeprom(&curvefit,curvefit_var_info);
+#endif
+
 }
 
 // update Proximity state for all instances. This should be called at a high rate by the main loop
