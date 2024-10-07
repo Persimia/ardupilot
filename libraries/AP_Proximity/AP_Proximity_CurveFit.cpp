@@ -8,40 +8,74 @@
 
 const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
 
+    // @param{Copter}: _MINPTS
+    // @Displayname: Proximity Curvefit Minimum Points
+    // @Description: Minimum nunber of data points to be consideredd a surface
+    // @Values: 1, 255
+    // @User: Advanced
+    AP_GROUPINFO("_MINPTS", 1, AP_Proximity_CurveFit, _min_pts, 20),
+
     // @Param{Copter}: _FLAT
     // @DisplayName: Proximity Curvefit Flatness Threshold
     // @Description: maximum  value of det(A) to be considered flat
     // @Values: 0.1, 20000.00
     // @User: Advanced
-    AP_GROUPINFO("_FLAT", 1, AP_Proximity_CurveFit, _flatness_threshold, 1000),
+    AP_GROUPINFO("_FLAT", 2, AP_Proximity_CurveFit, _flatness_threshold, 1),
 
     // @Param{Copter}: _DISC
     // @DisplayName: Proximity Curvefit Discontinuity Threshold
     // @Description: Difference in Distance between subsequent points
     // @Values: 0.1, 5.0
+    // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_DISC", 2, AP_Proximity_CurveFit, _discontinuity_threshold, 2),
+    AP_GROUPINFO("_DISC", 3, AP_Proximity_CurveFit, _discontinuity_threshold, 2),
 
     // @Param{Copter}: _CNR
     // @DisplayName: Proximity Curvefit Corner Threshold
     // @Description: maximum  value of det(A) to be considered flat
     // @Values: 0.1, 20000.00
     // @User: Advanced
-    AP_GROUPINFO("_CNR", 3, AP_Proximity_CurveFit, _corner_threshold, 0.2),
+    AP_GROUPINFO("_CNR", 4, AP_Proximity_CurveFit, _corner_threshold, 0.7),
 
-    // @Param{Copter}: _MINANG
+    // @Param{Copter}: _CNRWIN
+    // @DisplayName: Proximity Curvefit Corner Threshold
+    // @Description: maximum  value of det(A) to be considered flat
+    // @Values: 0.1, 20000.00
+    // @User: Advanced
+    AP_GROUPINFO("_CNRWIN", 5, AP_Proximity_CurveFit, _corner_window, 10),
+
+
+    // @Param{Copter}: _ANGMIN
     // @DisplayName: Proximity Curvefit Minimum Angle
     // @Description: Proximity Minimum Angle
-    // @Values: -90, -5,
+    // @Values: -90, -5
+    // @Units: deg  
     // @User: Advanced
-    AP_GROUPINFO("_MINANG", 4, AP_Proximity_CurveFit, _angle_min_deg, -22.5),
+    AP_GROUPINFO("_ANGMIN", 6, AP_Proximity_CurveFit, _angle_min_deg, -22.5),
     
-    // @Param{Copter}: _MAXANG
+    // @Param{Copter}: _ANGMAX
     // @DisplayName: Proximity Curvefit Maximum Angle
-    // @Description: Proximity Maximum Angle
-    // @Values: 5, 90,
+    // @Description: Proximity Curvefit Maximum Angle
+    // @Values: 5, 90
+    // @Units: deg
     // @User: Advanced
-    AP_GROUPINFO("_MAXANG", 5, AP_Proximity_CurveFit, _angle_max_deg, 22.5),
+    AP_GROUPINFO("_ANGMAX", 7, AP_Proximity_CurveFit, _angle_max_deg, 22.5),
+
+    // @Param{Copter}: _RNGMIN
+    // @DisplayName: Proximity Curvefit Minimum Range
+    // @Description: Proximity Curvefit Minimum Range
+    // @Values: 0.5, 50
+    // @Units m
+    // @User: Advanced
+    AP_GROUPINFO("_RNGMIN", 8, AP_Proximity_CurveFit, _rng_min_m, 0.5),
+    
+    // @Param{Copter}: _RNGMAX
+    // @DisplayName: Proximity Curvefit Maximum Range
+    // @Description: Proximity Curvefit Maximum Range
+    // @Values: 0.5, 50
+    // @Units: m
+    // @User: Advanced
+    AP_GROUPINFO("_RNGMAX", 9, AP_Proximity_CurveFit, _rng_max_m, 5),
 
     AP_GROUPEND
 };
@@ -49,13 +83,19 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
 AP_Proximity_CurveFit::AP_Proximity_CurveFit()
 {
     AP_Param::setup_object_defaults(this, var_info);
+    closest_distance_ = _rng_max_m.get();
 }
 
 
-void AP_Proximity_CurveFit::get_target(float &heading, float & distance, const Vector2f curr_pos)
+bool AP_Proximity_CurveFit::get_target(float &heading, float &distance)
 {
+    Vector2f curr_pos;
+    if(!AP::ahrs().get_relative_position_NE_origin(curr_pos)){
+        return false; // No Position Estimate
+    }
+
     if(!compute_curvature_center(curr_pos)){
-        return; // Unable to solve heading, distance
+        return false; // Unable to solve heading, distance
     }
 
     // Vector from vehicle position to center of curvature;
@@ -85,52 +125,55 @@ void AP_Proximity_CurveFit::get_target(float &heading, float & distance, const V
         heading = wrap_PI(r_pos_center.angle());
         Vector2f normal = Vector2f{r_pos_center};
         normal.normalize();
-        distance = (closest_point - curr_pos).dot(normal);
+        distance = (data[closest_index] - curr_pos).dot(normal);
         break;
     }
     case AP_Proximity_CurveFit::CenterType::NONE:
         FALLTHROUGH;
     default:
-        return;
+        return false;
     }
 
-    log_target(heading,distance);
-
+    log_target(heading,distance); //write to dataflash log
+    return true;
 }
 
 
 bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
 {
+    truncate_data();
+    if(read_end-read_start <= _min_pts.get()){
+        // Insufficient Data
+        return false;
+    }
 
     if(center_type != AP_Proximity_CurveFit::CenterType::NONE){
         // Nothing to do
         return true;
     }
-
-    if(read_end-read_start < 1){ // No data
-        center_type = AP_Proximity_CurveFit::CenterType::NONE;
-        return false;
-    }
     
     reference_point = Vector2f(reference);
-    filter_data();
-
-    if(read_end-read_start <= 5){ // Treat as a single point
+    
+    if(detect_corner()){
+        // Point
         center_type = AP_Proximity_CurveFit::CenterType::POINT;
-        center = Vector2f(closest_point - reference_point);
+        center = data[closest_index];
         radius = 0.0;
         log_fit();
         return true;
     }
 
+
     AP_Proximity_CurveFit::Coefficients coefficients;
     compute_coefficients(coefficients);
 
     if(solve_circle(coefficients)){
-        if((center).length() < radius){//origin is inside the circle
+        if((center).length() < radius){
+            //origin is inside the circle => concave
             center_type = AP_Proximity_CurveFit::CenterType::CIRCLE_CONCAVE;
         }
-        else{ //origin is outside the circle
+        else{
+            //origin is outside the circle => convex
             center_type = AP_Proximity_CurveFit::CenterType::CIRCLE_CONVEX;
         }
         log_fit();
@@ -143,11 +186,7 @@ bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
         return true;
     }
 
-    // All else fails, take the closest point
-    center = Vector2f(closest_point-reference_point);
-    center_type = AP_Proximity_CurveFit::CenterType::POINT;
-    log_fit();
-    return true;
+    return false;
 
 }
 
@@ -175,7 +214,7 @@ bool AP_Proximity_CurveFit::solve_circle(AP_Proximity_CurveFit::Coefficients c)
                   {2*c.Sum_xy, 2*c.Sum_y2, c.Sum_y},
                   {2*c.Sum_x,  2*c.Sum_y,  float(c.n)}};
     
-    if(A.det() < _flatness_threshold.get()){
+    if(A.det()*1.0e5f/(float(c.n) * c.Sum_x2 * c.Sum_y2) < _flatness_threshold.get()){
         return false;
     }
 
@@ -223,8 +262,7 @@ bool AP_Proximity_CurveFit::solve_line(AP_Proximity_CurveFit::Coefficients c)
     center.x = (c.Sum_y2*c.Sum_x - c.Sum_xy*c.Sum_y)/det;
     center.y = (c.Sum_x2*c.Sum_y - c.Sum_xy*c.Sum_x)/det;
 
-    center.normalize();
-    center = center*LARGE_FLOAT;
+    center = center.normalized()*LARGE_FLOAT;
     radius = LARGE_FLOAT;
     return true;
 }
@@ -233,79 +271,108 @@ bool AP_Proximity_CurveFit::solve_line(AP_Proximity_CurveFit::Coefficients c)
 void AP_Proximity_CurveFit::add_point(float angle_deg, float distance)
 {
     angle_deg = wrap_180(angle_deg);
-    if(angle_deg < _angle_max_deg.get() && angle_deg > _angle_min_deg.get() && write_end < write_start + CURVEFIT_DATA_LEN){
-        Vector2f current_position;
-        if(AP::ahrs().get_relative_position_NE_origin(current_position)){
-            float yaw = AP::ahrs().get_yaw();
-            PrxData point;
-            point.position.x = distance*cosf(angle_deg*DEG_TO_RAD+yaw) + current_position.x;
-            point.position.y = distance*sinf(angle_deg*DEG_TO_RAD+yaw) + current_position.y;
-            point.distance = distance;
-            data[write_end] = point;
-            write_end += 1;
+    if(angle_deg > _angle_min_deg.get() && angle_deg < _angle_max_deg.get()){
+        if(distance > _rng_min_m.get() && distance < _rng_max_m.get() && write_end < write_start + CURVEFIT_DATA_LEN){
+            Vector2f current_position;
+            if(AP::ahrs().get_relative_position_NE_origin(current_position)){
+                float yaw = AP::ahrs().get_yaw();
+                Vector2f point;
+                point.x = distance*cosf(angle_deg*DEG_TO_RAD+yaw) + current_position.x;
+                point.y = distance*sinf(angle_deg*DEG_TO_RAD+yaw) + current_position.y;
+                data[write_end] = point;
+
+                if (distance <= closest_distance_){
+                    closest_distance_ = distance;
+                    closest_index_ = write_end;
+                }
+                write_end += 1;
+            }
         }
     }
-    else if(_last_angle > _angle_min_deg.get() && _last_angle < _angle_max_deg.get()){
+    else if(last_angle > _angle_min_deg.get() && last_angle < _angle_max_deg.get()){
         reset();
     }
-    _last_angle = angle_deg;
+    last_angle = angle_deg;
+    return;
 }
 
-void AP_Proximity_CurveFit::filter_data()
+void AP_Proximity_CurveFit::truncate_data()
 {
-    // Find the closest point
-    auto closest_data = std::min_element(data+read_start, data+read_end,
-    [](const PrxData a, const PrxData b)->bool {return a.distance<b.distance;});
-    closest_point = Vector2f(closest_data->position);
-    closest_distance = closest_data->distance;
+
+    if(read_start == read_end){
+        //No data
+        return;
+    }
+
+    Vector2f normal_dir = (data[closest_index] - reference_point).normalized();
     // Check for discontinuity and truncate data 
-    PrxData* it;
-    for(it = closest_data; it!= data+(read_end-1); it++){
-        if(abs((it+1)->distance - it->distance) > _discontinuity_threshold.get()){
-            read_end = (it+1) - data;
+    for(int i = closest_index; i < read_end-1; i++){
+        if(normal_dir.dot(data[i+1] - data[i]) > _discontinuity_threshold.get()){
+            read_end = i;
             break;
         }
     }
     
-    for(it = closest_data; it!= data; it--){
-        if(abs((it-1)->distance - it->distance) > _discontinuity_threshold.get()){
-            read_start = it-data;
+    for(int i = closest_index; i > read_start; i--){
+        if(normal_dir.dot(data[i-1] - data[i]) > _discontinuity_threshold.get()){
+            read_start = i;
             break;
         }
     }
+    return;
+}
+
+bool AP_Proximity_CurveFit::detect_corner(){
     // Check if the min_distance is a corner
-    if(closest_data - (data+read_start) > 2 && (data+read_end) - closest_data > 2){
-        // Using the 3-point endpoint approximation for the derivative
-        float fwd = 0.5*(-3*closest_data->distance + 4*(closest_data+1)->distance - (closest_data+2)->distance);
-        float bkd = 0.5*(3*closest_data->distance - 4*(closest_data-1)->distance + (closest_data-2)->distance);
+    if (read_end == read_start){
+        return false;
+    }
 
-        // If the closest point is a corner remove all other points and return
-        if(fwd - bkd > _corner_threshold.get()){
-            read_start = closest_data - data;
-            read_end = read_start+1;
+    Vector2f fwd{0.0, 0.0};
+    float fwn = 0.0;
+    Vector2f bkd{0.0, 0.0};
+    float bkn = 0.0;
+
+    if(closest_index == read_end){
+        // Vector Corresponding to sight line
+        fwd = (data[read_end]-reference_point).normalized();
+        fwn  = 1.0;
+    }
+    else{
+        for(int i = closest_index+1; i < read_end && i <= closest_index +_corner_window.get()/2; i++){
+            fwd += (data[i] - data[closest_index]).normalized();
+            fwn += 1.0;
         }
-        return;
     }
 
-    // Check if the closest point is at the end of a data set
-    if(closest_data - (data+read_start) <= 2){
-        read_end = read_start+2;
-        return;
+    if(closest_index == read_start){
+        bkd = (data[read_start]-reference_point);
+        bkn = 1.0;
     }
-    else if((data+read_end) - closest_data <= 2){
-        read_start = read_end-2;
-        return;
+    else{
+        for(int i = closest_index-1; i >= read_start && i >= closest_index -_corner_window.get()/2; i--){
+            bkd += (data[i] - data[closest_index]).normalized();
+            bkn += 1.0;
+        }
     }
 
-return;
+    if(fwn < 0.1 || bkn < 0.1){
+        return false;
+    }
+
+    fwd = fwd/fwn;
+    bkd = bkd/bkn;
+
+    return (1 + fwd.dot(bkd)) > _corner_threshold;
+
 }
 
 
 void AP_Proximity_CurveFit::compute_coefficients(AP_Proximity_CurveFit::Coefficients &c)
 {   
     for(int it = read_start; it < read_end; it++){
-        float x = data[it].position.x - reference_point.x;
-        float y = data[it].position.y - reference_point.y;
+        float x = data[it].x - reference_point.x;
+        float y = data[it].y - reference_point.y;
         c.Sum_x += x;
         c.Sum_y += y;
         c.Sum_x2 += x*x;
@@ -326,8 +393,11 @@ void AP_Proximity_CurveFit::reset()
     write_start = (write_start == CURVEFIT_DATA_LEN ? 0 : CURVEFIT_DATA_LEN);
     write_end = write_start;
 
+    closest_index = closest_index_;
+    closest_index_ = write_start;
+    closest_distance_ = _rng_max_m.get();
+
     center_type = AP_Proximity_CurveFit::CenterType::NONE;
-    closest_distance = 0.0;
 }
 
 void AP_Proximity_CurveFit::log_fit()
@@ -361,6 +431,5 @@ void AP_Proximity_CurveFit::log_target(const float heading, const float distance
     };
     AP::logger().WriteBlock(&pkt, sizeof(pkt));
 }
-
 
 #endif

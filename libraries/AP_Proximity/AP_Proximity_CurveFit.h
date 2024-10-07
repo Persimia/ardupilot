@@ -10,10 +10,6 @@
 class AP_Proximity_CurveFit
 {
     typedef struct{
-        Vector2f position;
-        float distance;
-    }PrxData;
-    typedef struct{
         float Sum_x3{0.0};
         float Sum_y3{0.0};
         float Sum_xy2{0.0};
@@ -40,7 +36,7 @@ public:
 
     // Set "heading" to center in Rad and "distance" to surface in m given current position from EKF origin.
     // Heading and distance are unchanged if curve fit failed
-    void get_target(float &heading, float &distance, const Vector2f curr_pos);
+    bool get_target(float &heading, float &distance);
 
     // Add coordinate of obstacle to data set given yaw "angle" to obstacle in Radians 
     // "distance" to obstacle in meters "current_position" in meters from and vehicle "yaw" attitude in Radians 
@@ -65,11 +61,13 @@ private:
     // set reference_point (origin) of the fit.
     bool compute_curvature_center(Vector2f reference);
 
-    // Clean up data by removing jump discontinuities and isolating corner points;
-    // set closest_point property
-    void filter_data();
+    // Clean up data by removing jump discontinuities;
+    void truncate_data();
 
-    // set coefficients structure using filtered data.
+    // Return true if the closest point is a corner
+    bool detect_corner();
+
+    // set coefficients structure using truncated data.
     void compute_coefficients(AP_Proximity_CurveFit::Coefficients &c);
 
     // return true if circle could be fit through data.
@@ -80,25 +78,35 @@ private:
     // set center and radius properties
     bool solve_line(const AP_Proximity_CurveFit::Coefficients c);
 
-    PrxData data[2*CURVEFIT_DATA_LEN];
+    Vector2f data[2*CURVEFIT_DATA_LEN];
     int read_start = 0;
     int read_end = 0;
+    int closest_index = 0;
+
     int write_start = CURVEFIT_DATA_LEN;
     int write_end = CURVEFIT_DATA_LEN;
-    float _last_angle;
+    int closest_index_ = CURVEFIT_DATA_LEN;
+
+    float last_angle;
+    float closest_distance_;
 
     Vector2f reference_point; // coordinates in global frame of fit origin.
-    Vector2f closest_point; // closest point in global frame of closest point.
-    float closest_distance;
     Vector2f center; // coordinates in fit frame of center. For a circle this is the center. For a line this is a vector alligned with normal.
     float radius; // radius in m. For circle this is radius. For line this is length of the normal vector.
     AP_Proximity_CurveFit::CenterType center_type{AP_Proximity_CurveFit::CenterType::NONE};
 
-    AP_Float _flatness_threshold;  // Threshold for det(A) thet should be counted as flat
-    AP_Float _discontinuity_threshold; // units m default 2
-    AP_Float _corner_threshold; //{0.2}
-    AP_Float _angle_min_deg; //{-22.5}
-    AP_Float _angle_max_deg; // {22.5}
+    //Parameters
+    AP_Int16 _min_pts;
+    AP_Float _flatness_threshold;  // Threshold for det(A) that should be counted as flat
+    AP_Float _discontinuity_threshold;
+    AP_Float _corner_threshold;
+    AP_Int16 _corner_window;
+    AP_Float _angle_min_deg;
+    AP_Float _angle_max_deg;
+    AP_Float _rng_max_m;
+    AP_Float _rng_min_m;
+
+
 
 };
 

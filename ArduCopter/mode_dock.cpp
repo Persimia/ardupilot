@@ -129,21 +129,17 @@ void ModeDock::run()
         float dist_to_obst_m;
 
     if(g2.proximity.get_closest_object(yaw_to_obst_deg, dist_to_obst_m)){
-            // YAW CONTROLLER //
+        // YAW CONTROLLER //
 
-            float heading_obst = wrap_PI(yaw_attitude + yaw_to_obst_deg*DEG_TO_RAD);
-
-            //////////////////////////////////////////////////////////////////////////////////////////////////
-            // Curve Fit                                                                                    //
-            //////////////////////////////////////////////////////////////////////////////////////////////////
-            // Use curvefit to get an improved heading estimate
+        float heading_obst = wrap_PI(yaw_attitude + yaw_to_obst_deg*DEG_TO_RAD);
 #if AP_PROXIMITY_CURVEFIT_ENABLED == 1
-            Vector2f curr_pos;
-            if(ahrs.get_relative_position_NE_origin(curr_pos)){
-                g2.proximity.curvefit->get_target(heading_obst,dist_to_obst_m,curr_pos); //Get improved estimate
-            }
+            //////////////////////////////////////////////////////////////////////////////////////////////////
+        // Curve Fit                                                                                    //
+        //////////////////////////////////////////////////////////////////////////////////////////////////
+        // Use curvefit to get an improved heading estimate
+        g2.proximity.curvefit->get_target(heading_obst,dist_to_obst_m);     
 #endif
-        }
+    }
 #endif
 
     // Loiter State Machine Determination
