@@ -2,9 +2,11 @@
 #include <AP_Logger/AP_Logger.h>
 #include <AP_Proximity/AP_Proximity.h>
 #include <algorithm>
-#define LARGE_FLOAT 1.0e3
+
 
 #if AP_PROXIMITY_CURVEFIT_ENABLED
+#define LARGE_FLOAT 1.0e3
+#define QUANTIZATION 1.0E-3
 
 const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
 
@@ -142,8 +144,8 @@ bool AP_Proximity_CurveFit::get_target(float &heading, float &distance)
 bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
 {
     truncate_data();
-    if(read_end-read_start <= _min_pts.get()){
-        // Insufficient Data
+    if(read_end == read_start){
+        // No Data
         return false;
     }
 
@@ -154,10 +156,19 @@ bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
     
     reference_point = Vector2f(reference);
     
+    if(read_end - read_start < _min_pts.get()){
+       // Point
+        center_type = AP_Proximity_CurveFit::CenterType::POINT;
+        center = data[closest_index]-reference_point;
+        radius = 0.0;
+        log_fit();
+        return true; 
+    }
+
     if(detect_corner()){
         // Point
         center_type = AP_Proximity_CurveFit::CenterType::POINT;
-        center = data[closest_index];
+        center = data[closest_index]-reference_point;
         radius = 0.0;
         log_fit();
         return true;
@@ -271,24 +282,39 @@ bool AP_Proximity_CurveFit::solve_line(AP_Proximity_CurveFit::Coefficients c)
 void AP_Proximity_CurveFit::add_point(float angle_deg, float distance)
 {
     angle_deg = wrap_180(angle_deg);
+    // check if angle is within range
     if(angle_deg > _angle_min_deg.get() && angle_deg < _angle_max_deg.get()){
         if(distance > _rng_min_m.get() && distance < _rng_max_m.get() && write_end < write_start + CURVEFIT_DATA_LEN){
             Vector2f current_position;
             if(AP::ahrs().get_relative_position_NE_origin(current_position)){
                 float yaw = AP::ahrs().get_yaw();
+                // compute point in Global NE frame
                 Vector2f point;
                 point.x = distance*cosf(angle_deg*DEG_TO_RAD+yaw) + current_position.x;
                 point.y = distance*sinf(angle_deg*DEG_TO_RAD+yaw) + current_position.y;
-                data[write_end] = point;
 
-                if (distance <= closest_distance_){
-                    closest_distance_ = distance;
-                    closest_index_ = write_end;
+                if(abs(distance - last_distance)<QUANTIZATION){
+                // if the distance is duplicated due to quantization then update the present data point to reflect the average;
+                    avg_count += 1.0f;
+                    data[write_end] = (data[write_end]*(avg_count - 1.0f) + point)/avg_count;
                 }
-                write_end += 1;
+                else{
+                // add the point to the end of the data set
+                    avg_count = 1.0f;
+                    data[write_end] = point;
+                    last_distance = distance;
+                    // update closest distance
+                    if (distance <= closest_distance_){
+                        closest_distance_ = distance;
+                        closest_index_ = write_end;
+                    }
+                    write_end += 1;
+                }
             }
         }
     }
+    //reset when angle goes out of range
+    //this indicates that a new scan is availible and moves the write_start in preparation for the next scan
     else if(last_angle > _angle_min_deg.get() && last_angle < _angle_max_deg.get()){
         reset();
     }
@@ -308,7 +334,7 @@ void AP_Proximity_CurveFit::truncate_data()
     // Check for discontinuity and truncate data 
     for(int i = closest_index; i < read_end-1; i++){
         if(normal_dir.dot(data[i+1] - data[i]) > _discontinuity_threshold.get()){
-            read_end = i;
+            read_end = i+1;
             break;
         }
     }
@@ -329,42 +355,43 @@ bool AP_Proximity_CurveFit::detect_corner(){
     }
 
     Vector2f fwd{0.0, 0.0};
-    float fwn = 0.0;
     Vector2f bkd{0.0, 0.0};
-    float bkn = 0.0;
 
-    if(closest_index == read_end){
-        // Vector Corresponding to sight line
-        fwd = (data[read_end]-reference_point).normalized();
-        fwn  = 1.0;
-    }
-    else{
-        for(int i = closest_index+1; i < read_end && i <= closest_index +_corner_window.get()/2; i++){
-            fwd += (data[i] - data[closest_index]).normalized();
-            fwn += 1.0;
+    int corner_window = _corner_window.get()/2;
+    Vector2f v;
+    for(int i = 1; i <= corner_window; i++){
+        if(closest_index + i < read_end){
+            v = data[closest_index + i] - data[closest_index];
+        }
+        else{
+            v = data[read_end] - reference_point;//sight line
+        }
+        
+        if(v.length_squared() > 1.0e-6){
+            fwd += v.normalized();
         }
     }
-
-    if(closest_index == read_start){
-        bkd = (data[read_start]-reference_point);
-        bkn = 1.0;
+    if(fwd.length_squared() < 1.0e-4){
+        return true;
     }
-    else{
-        for(int i = closest_index-1; i >= read_start && i >= closest_index -_corner_window.get()/2; i--){
-            bkd += (data[i] - data[closest_index]).normalized();
-            bkn += 1.0;
+
+    for(int i = -1; i >= -corner_window; i--){
+        if(closest_index + i > read_start){
+            v = data[closest_index + i] - data[closest_index];
+        }
+        else{
+            v = data[read_start] - reference_point;//sight line
+        }
+        if(v.length_squared() > 1.0e-6){
+            bkd += v.normalized();
         }
     }
-
-    if(fwn < 0.1 || bkn < 0.1){
-        return false;
+    if(bkd.length_squared() < 1.0e-4){
+        return true;
     }
 
-    fwd = fwd/fwn;
-    bkd = bkd/bkn;
-
-    return (1 + fwd.dot(bkd)) > _corner_threshold;
-
+    return (1 + (fwd.dot(bkd))/(fwd.length() * bkd.length())) > _corner_threshold;
+    
 }
 
 

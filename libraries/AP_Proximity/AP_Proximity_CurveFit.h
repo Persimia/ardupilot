@@ -52,6 +52,11 @@ public:
     void log_target(const float heading, const float distance);
 
     static const struct AP_Param::GroupInfo var_info[];
+
+    inline int get_center_type() const {return center_type;};
+    inline Vector2f get_center() const {return center;};
+    inline float get_radius() const {return radius;};
+    inline bool angle_within_bound(float angle_deg) const {return angle_deg > _angle_min_deg.get() && angle_deg < _angle_max_deg.get();};
     
 private:
 
@@ -88,6 +93,8 @@ private:
     int closest_index_ = CURVEFIT_DATA_LEN;
 
     float last_angle;
+    float last_distance;
+    float avg_count = 1.0f;
     float closest_distance_;
 
     Vector2f reference_point; // coordinates in global frame of fit origin.
@@ -97,7 +104,7 @@ private:
 
     //Parameters
     AP_Int16 _min_pts;
-    AP_Float _flatness_threshold;  // Threshold for det(A) that should be counted as flat
+    AP_Float _flatness_threshold;  // Threshold for det(A)/n^3 that should be counted as flat
     AP_Float _discontinuity_threshold;
     AP_Float _corner_threshold;
     AP_Int16 _corner_window;

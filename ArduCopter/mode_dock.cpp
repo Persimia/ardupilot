@@ -5,7 +5,7 @@
 #define DOCK_VELXY_MAX_DEFAULT 200.0
 #define DOCK_MIN_DIST_DEFAULT 100.0
 
-#define CLOSED_LOOP false
+#define CLOSED_LOOP true
 
 /*
  * Init and run calls for dock flight mode
@@ -63,6 +63,8 @@ bool ModeDock::init(bool ignore_checks)
 
     // last_update of lidar data
     last_update_ms = millis();
+    // last_gcs_meaasge
+    last_gcs_message = last_update_ms; 
 
     // Obstacle Heading Vector
     sin_yaw_obst = sinf(ahrs.get_yaw());
@@ -123,7 +125,7 @@ void ModeDock::run()
         loiter_nav->soften_for_landing();
     }
 #if !CLOSED_LOOP
-    // Data Collection
+    // Data Collection only
         float yaw_attitude = ahrs.get_yaw();
         float yaw_to_obst_deg;
         float dist_to_obst_m;
@@ -133,11 +135,16 @@ void ModeDock::run()
 
         float heading_obst = wrap_PI(yaw_attitude + yaw_to_obst_deg*DEG_TO_RAD);
 #if AP_PROXIMITY_CURVEFIT_ENABLED == 1
-            //////////////////////////////////////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////////////////////////////////////
         // Curve Fit                                                                                    //
         //////////////////////////////////////////////////////////////////////////////////////////////////
         // Use curvefit to get an improved heading estimate
-        g2.proximity.curvefit->get_target(heading_obst,dist_to_obst_m);     
+        g2.proximity.curvefit->get_target(heading_obst,dist_to_obst_m);
+        uint32_t current_gcs_message = millis();
+        if(current_gcs_message - last_gcs_message > 200){
+            gcs().send_named_float("CenterType",float(g2.proximity.curvefit->get_center_type()));
+            last_gcs_message = current_gcs_message;
+        }
 #endif
     }
 #endif
@@ -202,7 +209,7 @@ void ModeDock::run()
         Vector2f target_vel_xy = get_pilot_desired_velocity_xy(dock_velxy_max.get());
         if(g2.proximity.get_closest_object(yaw_to_obst_deg, dist_to_obst_m)){
             // YAW CONTROLLER //
-
+            yaw_to_obst_deg = wrap_180(yaw_to_obst_deg);
             float heading_obst = wrap_PI(yaw_attitude + yaw_to_obst_deg*DEG_TO_RAD);
 
             //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -210,9 +217,14 @@ void ModeDock::run()
             //////////////////////////////////////////////////////////////////////////////////////////////////
             // Use curvefit to get an improved heading estimate
 #if AP_PROXIMITY_CURVEFIT_ENABLED == 1
-            Vector2f curr_pos;
-            if(ahrs.get_relative_position_NE_origin(curr_pos)){
-                g2.proximity.curvefit.get_target(heading_obst,dist_to_obst_m,curr_pos); //Get improved estimate
+            if(g2.proximity.curvefit->angle_within_bound(yaw_to_obst_deg)){
+                g2.proximity.curvefit->get_target(heading_obst,dist_to_obst_m); //Get improved estimate
+            }
+            
+            uint32_t current_gcs_message = millis();
+            if(current_gcs_message - last_gcs_message > 200){
+                gcs().send_named_float("CenterType",float(g2.proximity.curvefit->get_center_type()));
+                last_gcs_message = current_gcs_message;
             }
 #endif
 
