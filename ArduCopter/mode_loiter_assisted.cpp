@@ -1,8 +1,7 @@
 #include "Copter.h"
-#include <AP_DDS/AP_DDS_Client.h>
 
 #if MODE_LOITER_ASSISTED_ENABLED == ENABLED
-
+#include <AP_DDS/AP_DDS_Client.h>
 /*
  * Init and run calls for loiter flight mode
  */
