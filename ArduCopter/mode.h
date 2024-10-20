@@ -1312,6 +1312,7 @@ public:
     bool attach();
     bool detach();
     bool attached();
+    static bool attached_state;
 
     static const struct AP_Param::GroupInfo var_info[];
 

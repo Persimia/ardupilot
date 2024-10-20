@@ -3,6 +3,7 @@
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Winch/AP_Winch_config.h>
 #include "defines.h"
+#include "config.h"
 
 #ifndef AC_MAVLINK_SOLO_BUTTON_COMMAND_HANDLING_ENABLED
 #define AC_MAVLINK_SOLO_BUTTON_COMMAND_HANDLING_ENABLED 1
@@ -126,6 +127,10 @@ private:
 
 #if AP_WINCH_ENABLED
     MAV_RESULT handle_MAV_CMD_DO_WINCH(const mavlink_command_int_t &packet);
+#endif
+
+#if MODE_LOITER_ASSISTED_ENABLED
+    MAV_RESULT handle_attach_message(const mavlink_message_t &msg);
 #endif
 
 };

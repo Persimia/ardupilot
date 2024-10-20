@@ -1,7 +1,6 @@
 #include "Copter.h"
 
 #if MODE_LOITER_ASSISTED_ENABLED == ENABLED
-#include <AP_DDS/AP_DDS_Client.h>
 /*
  * Init and run calls for loiter flight mode
  */
@@ -19,6 +18,8 @@
 #define UNDOCK_SPEED_MPS_DEFAULT             30.0
 
 #define DOCK_TARGET_DIST_CM                  0.0
+
+bool ModeLoiterAssisted::attached_state = false;  // Initialization
 
 const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Param: P_2_FW_VEL
@@ -170,9 +171,12 @@ bool ModeLoiterAssisted::attach() { // init attach engaged via RC_Channel
         GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Variance too high, not ready to dock");
         return false;
     }
-    // AP_DDS publish attach message... should change to state setup?
-    AP_DDS_Client::need_to_pub_attach_detach = true;
-    AP_DDS_Client::desire_attach = true;
+    // // AP_DDS publish attach message... should change to state setup?
+    // AP_DDS_Client::need_to_pub_attach_detach = true;
+    // AP_DDS_Client::desire_attach = true;
+
+    gcs().send_named_float("attach", 1.0f);
+
 
     _crash_check_enabled = false;
 
@@ -191,9 +195,11 @@ bool ModeLoiterAssisted::detach() { // init detach engaged via RC_Channel
     if (_docking_state == DockingState::NOT_DOCKING) { // only detach when we are attaching or attached
         return false;
     }
-    // AP_DDS publish detach message
-    AP_DDS_Client::need_to_pub_attach_detach = true;
-    AP_DDS_Client::desire_attach = false;
+    // // AP_DDS publish detach message
+    // AP_DDS_Client::need_to_pub_attach_detach = true;
+    // AP_DDS_Client::desire_attach = false;
+    gcs().send_named_float("attach", 0.0f);
+
 
     _docking_state = DockingState::DETACH_MANEUVER;
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Detach primed");
@@ -443,7 +449,7 @@ void ModeLoiterAssisted::run()
                         filt_yaw_cmd_deg = wrap_180(_bearing_cd/100.0f - ahrs.get_yaw()*RAD_TO_DEG);
                         // ::fprintf(stderr,"sending pos x: %f, y: %f, z: %f\n", _xy_pos.x, _xy_pos.y, _z_pos);
                         // ::fprintf(stderr,"sending vel x: %f, y: %f, z: %f\n", _xy_vel.x, _xy_vel.y, _z_vel);
-                        if(AP_DDS_Client::attached_state) { //signal from sensor
+                        if(ModeLoiterAssisted::attached_state) { //signal from sensor
                             attached();
                         }
                         break;
@@ -457,7 +463,7 @@ void ModeLoiterAssisted::run()
                         break;
 
                     case DockingState::ATTACHED:
-                        if(!AP_DDS_Client::attached_state) { //this is bad news if we become unattached without manually unattaching!
+                        if(!ModeLoiterAssisted::attached_state) { //this is bad news if we become unattached without manually unattaching!
                             GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY, "Unexpected detach!");
                             _docking_state = DockingState::DETACH_MANEUVER;
                         }
