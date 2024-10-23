@@ -189,6 +189,14 @@ void AP_Proximity_LightWareSF45B::process_message()
                 _minisector_distance = distance_m;
                 _minisector_distance_valid = true;
             }
+            if (is_equal(distance_m,_minisector_distance)){
+                n_dupl++;
+                _minisector_angle = ((n_dupl-1)*_minisector_angle + angle_deg)/(n_dupl);
+                
+            }
+            else{
+                n_dupl = 0;
+            }
         }
         break;
     }
