@@ -149,7 +149,7 @@ void AP_Proximity_LightWareSF45B::process_message()
         const AP_Proximity_Boundary_3D::Face face = frontend.boundary.get_face(angle_deg);
         if (face != _face) {
             if (_face_distance_valid) {
-                frontend.boundary.set_face_attributes(_face, _face_yaw_deg, _face_distance, state.instance);
+                frontend.boundary.set_face_attributes(_face, wrap_360(_face_yaw_deg), _face_distance, state.instance);
             } else {
                 // mark previous face invalid
                 frontend.boundary.reset_face(_face, state.instance);
@@ -178,9 +178,15 @@ void AP_Proximity_LightWareSF45B::process_message()
         if (!ignore_reading(angle_deg, distance_m) && (distance_m >= distance_min()) && (distance_m <= distance_max())) {
             // update shortest distance for this face
             if (!_face_distance_valid || (distance_m < _face_distance)) {
-                _face_yaw_deg = angle_deg;
+                _face_yaw_deg = wrap_180(angle_deg);
                 _face_distance = distance_m;
                 _face_distance_valid = true;
+                n_dupl = 0;
+            } else if (is_equal(distance_m,_face_distance)){
+                n_dupl++;
+                _face_yaw_deg = ((n_dupl)*_face_yaw_deg + wrap_180(angle_deg))/(n_dupl+1);
+            } else{
+                n_dupl = 0;
             }
 
             // update shortest distance for this mini sector
@@ -188,14 +194,6 @@ void AP_Proximity_LightWareSF45B::process_message()
                 _minisector_angle = angle_deg;
                 _minisector_distance = distance_m;
                 _minisector_distance_valid = true;
-            }
-            if (is_equal(distance_m,_minisector_distance)){
-                n_dupl++;
-                _minisector_angle = ((n_dupl-1)*_minisector_angle + angle_deg)/(n_dupl);
-                
-            }
-            else{
-                n_dupl = 0;
             }
         }
         break;
