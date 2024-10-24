@@ -1,4 +1,7 @@
 #include "Copter.h"
+#if AP_DDS_ENABLED
+#include <AP_DDS/AP_DDS_Client.h>
+#endif
 
 #if MODE_LOITER_ASSISTED_ENABLED == ENABLED
 /*
@@ -171,10 +174,11 @@ bool ModeLoiterAssisted::attach() { // init attach engaged via RC_Channel
         GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Variance too high, not ready to dock");
         return false;
     }
-    // // AP_DDS publish attach message... should change to state setup?
-    // AP_DDS_Client::need_to_pub_attach_detach = true;
-    // AP_DDS_Client::desire_attach = true;
-
+    #if AP_DDS_ENABLED
+    // AP_DDS publish attach message... should change to state setup?
+    AP_DDS_Client::need_to_pub_attach_detach = true;
+    AP_DDS_Client::desire_attach = true;
+    #endif
     gcs().send_named_float("attach", 1.0f);
 
 
@@ -195,9 +199,11 @@ bool ModeLoiterAssisted::detach() { // init detach engaged via RC_Channel
     if (_docking_state == DockingState::NOT_DOCKING) { // only detach when we are attaching or attached
         return false;
     }
-    // // AP_DDS publish detach message
-    // AP_DDS_Client::need_to_pub_attach_detach = true;
-    // AP_DDS_Client::desire_attach = false;
+    #if AP_DDS_ENABLED
+    // AP_DDS publish detach message
+    AP_DDS_Client::need_to_pub_attach_detach = true;
+    AP_DDS_Client::desire_attach = false;
+    #endif
     gcs().send_named_float("attach", 0.0f);
 
 
