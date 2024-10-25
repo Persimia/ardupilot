@@ -378,10 +378,11 @@ void ModeLoiterAssisted::run()
             bool found_obstacle = g2.proximity.get_closest_object(yaw_to_obs_deg, dist_to_obs_m);
             if (millis()-_time_since_last_yaw > 1) {
                 _yaw_buf.addYaw(ahrs.get_yaw()); // add the current yaw to the buffer
-                if (millis()-_init_time > _mtn_cmp_ms+1) {
-                    yaw_to_obs_deg += (_yaw_buf.getDelayedYaw(_mtn_cmp_ms) - ahrs.get_yaw()); // get the adjusted offset
-                }
                 _time_since_last_yaw = millis();
+            }
+            float delayed_yaw = 0.0f; 
+            if (_yaw_buf.getDelayedYaw(_mtn_cmp_ms.get(), delayed_yaw)) {
+                yaw_to_obs_deg += (delayed_yaw - ahrs.get_yaw()); // get the adjusted offset
             }
             yaw_to_obs_deg = wrap_180(yaw_to_obs_deg);
             
