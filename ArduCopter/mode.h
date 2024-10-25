@@ -4,6 +4,7 @@
 #include <AP_Math/chirp.h>
 #include <AP_ExternalControl/AP_ExternalControl_config.h> // TODO why is this needed if Copter.h includes this
 #include <deque>
+#include <vector>
 
 class Parameters;
 class ParametersG2;
@@ -1365,6 +1366,7 @@ private:
     AP_Float _wv_thresh;
     AP_Float _dock_speed_mps;
     AP_Float _undock_speed_mps;
+    AP_Int32 _mtn_cmp_ms;
 
     uint32_t _last_yaw_update_ms;
 
@@ -1413,6 +1415,33 @@ private:
 
     Vector3f _current_vehicle_position;
     Vector3f _filt_dock_target_pos;
+
+    class YawBuffer {
+        public:
+            YawBuffer() : YawBuffer(100) {}
+            YawBuffer(uint32_t buffer_size) : _size(buffer_size), _buffer(buffer_size, 0.0), _index(0) {}
+
+            // Add a new yaw value to the buffer
+            void addYaw(float yaw) {
+                _buffer[_index] = yaw;
+                _index = (_index + 1) % _size; // Circular increment
+            }
+
+            // Get the yaw value with the specified delay in milliseconds
+            float getDelayedYaw(uint32_t idx_diff) const {
+                uint32_t delayed_index = (_index + _size - idx_diff) % _size;
+                return _buffer[delayed_index];
+            }
+
+        private:
+            uint32_t _size;                  // Size of the buffer
+            std::vector<float> _buffer; // Circular buffer to store yaw values
+            uint32_t _index;                 // Current index in the buffer
+    };
+    YawBuffer _yaw_buf;
+    uint32_t _time_since_last_yaw;
+    uint32_t _init_time;
+
 
 #if AC_PRECLAND_ENABLED
     bool _precision_loiter_enabled;

@@ -19,6 +19,8 @@
 #define WV_THRESH_DEFAULT                    0.1 
 #define DOCK_SPEED_MPS_DEFAULT               0.2
 #define UNDOCK_SPEED_MPS_DEFAULT             30.0
+#define MTN_CMP_MS_DEFAULT                   50
+
 
 #define DOCK_TARGET_DIST_CM                  0.0
 
@@ -106,6 +108,14 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("UNDOCK_SPD", 11, ModeLoiterAssisted, _undock_speed_mps, UNDOCK_SPEED_MPS_DEFAULT),
 
+    // @Param: MTN_CMP_MS
+    // @DisplayName: Motion compensation delay
+    // @Description: ms delay between when lidar arrives and when heading is computed
+    // @Unit: ms
+    // @Range: 0 100
+    // @User: Advanced
+    AP_GROUPINFO("MTN_CMP_MS", 12, ModeLoiterAssisted, _mtn_cmp_ms, MTN_CMP_MS_DEFAULT),
+
     AP_GROUPEND
 };
 
@@ -155,6 +165,9 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     _dist_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dist_filt_hz.get());
     _dock_target_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _pos_filt_hz.get()); // TODO: use custom dock hz param
     _dock_target_window_var = WindowVar(_wv_window_size.get()); // reinit with new min samples
+    _yaw_buf = ModeLoiterAssisted::YawBuffer(); // reinit yaw buffer
+    _time_since_last_yaw = millis();
+    _init_time = millis();
     _lock_commands = false;
 #if AC_PRECLAND_ENABLED
     _precision_loiter_active = false;
@@ -363,8 +376,15 @@ void ModeLoiterAssisted::run()
             float yaw_to_obs_deg; // yaw angle is measured in the local frame
             float dist_to_obs_m;
             bool found_obstacle = g2.proximity.get_closest_object(yaw_to_obs_deg, dist_to_obs_m);
+            if (millis()-_time_since_last_yaw > 1) {
+                _yaw_buf.addYaw(ahrs.get_yaw()); // add the current yaw to the buffer
+                if (millis()-_init_time > _mtn_cmp_ms+1) {
+                    yaw_to_obs_deg += (_yaw_buf.getDelayedYaw(_mtn_cmp_ms) - ahrs.get_yaw()); // get the adjusted offset
+                }
+                _time_since_last_yaw = millis();
+            }
             yaw_to_obs_deg = wrap_180(yaw_to_obs_deg);
-
+            
             
             if (found_obstacle) { // only perform obstacle stuff when obstacles are in, otherwise do regular loiter
                 if(!_target_acquired){// Reacquired target so reset yaw. TODO manage this state better
