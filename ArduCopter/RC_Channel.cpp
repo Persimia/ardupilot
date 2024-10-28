@@ -658,6 +658,7 @@ bool RC_Channel_Copter::do_aux_function(const AUX_FUNC ch_option, const AuxSwitc
         // do nothing, used in tuning.cpp for transmitter based tuning
         break;
 
+#if MODE_LOITER_ASSISTED_ENABLED == ENABLED
     case AUX_FUNC::LASS_ATTACH_DETACH:
             if (copter.flightmode == &copter.mode_loiter_assisted) {
                 switch (ch_flag) {
@@ -670,6 +671,7 @@ bool RC_Channel_Copter::do_aux_function(const AUX_FUNC ch_option, const AuxSwitc
                 }
             }
             break;
+#endif
 
     default:
         return RC_Channel::do_aux_function(ch_option, ch_flag);

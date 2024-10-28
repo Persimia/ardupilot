@@ -144,6 +144,14 @@ void AP_Proximity_LightWareSF45B::process_message()
         const float distance_m = _distance_filt.apply((int16_t)UINT16_VALUE(_msg.payload[1], _msg.payload[0])) * 0.01f;
         const float angle_deg = correct_angle_for_orientation((int16_t)UINT16_VALUE(_msg.payload[3], _msg.payload[2]) * 0.01f);
 
+#if AP_PROXIMITY_CURVEFIT_ENABLED
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // curve fit
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            frontend.curvefit->add_point(angle_deg, distance_m); //add data
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#endif
+
         // if distance is from a new face then update distance, angle and boundary for previous face
         // get face from 3D boundary based on yaw angle to the object
         const AP_Proximity_Boundary_3D::Face face = frontend.boundary.get_face(angle_deg);
@@ -154,6 +162,7 @@ void AP_Proximity_LightWareSF45B::process_message()
                 // mark previous face invalid
                 frontend.boundary.reset_face(_face, state.instance);
             }
+
             // record updated face
             _face = face;
             _face_yaw_deg = 0;

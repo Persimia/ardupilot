@@ -5,7 +5,8 @@
 
 #define LOG_IDS_FROM_PROXIMITY \
     LOG_PROXIMITY_MSG, \
-    LOG_RAW_PROXIMITY_MSG
+    LOG_RAW_PROXIMITY_MSG,\
+    LOG_PROXIMITY_CFIT_TGT_MSG
 
 // @LoggerMessage: PRX
 // @Description: Proximity Filtered sensor data
@@ -70,6 +71,19 @@ struct PACKED log_Proximity_raw {
     float raw_dist315;
 };
 
+#if AP_PROXIMITY_CURVEFIT_ENABLED == 1
+// @LoggerMessage: CFTT
+// @Description: Proximity Raw sensor data
+// @Field: TimeUS: Time since system startup
+// @Field: THdg: Target Heading
+// @Field: TDst: Target Distance
+struct PACKED log_Proximity_Cfit_Target{
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    float target_heading;
+    float target_distance;
+};
+#endif
 
 #if HAL_PROXIMITY_ENABLED
 #define LOG_STRUCTURE_FROM_PROXIMITY \
@@ -79,4 +93,12 @@ struct PACKED log_Proximity_raw {
       "PRXR", "QBffffffff", "TimeUS,Layer,D0,D45,D90,D135,D180,D225,D270,D315", "s#mmmmmmmm", "F-00000000", true },
 #else
 #define LOG_STRUCTURE_FROM_PROXIMITY
+#endif
+
+#if HAL_PROXIMITY_ENABLED && AP_PROXIMITY_CURVEFIT_ENABLED == 1
+#define LOG_STRUCTURE_FROM_PROXIMITY_CURVEFIT\
+    {LOG_PROXIMITY_CFIT_TGT_MSG, sizeof(log_Proximity_Cfit_Target),\
+    "CFTT", "Qff", "TimeUS,THdg,TDis","shm","F--",true},
+#else
+#define LOG_STRUCTURE_FROM_PROXIMITY_CURVEFIT
 #endif

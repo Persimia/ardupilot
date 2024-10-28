@@ -24,6 +24,7 @@
 #include <GCS_MAVLink/GCS_MAVLink.h>
 #include "AP_Proximity_Params.h"
 #include "AP_Proximity_Boundary_3D.h"
+#include "AP_Proximity_CurveFit.h"
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
 #include <AP_HAL/Semaphores.h>
@@ -201,6 +202,15 @@ public:
     // 3D boundary
     AP_Proximity_Boundary_3D boundary;
 
+    ///////////////////////////////////////////////////////////////////////////////////
+    // Curve Fit
+    ///////////////////////////////////////////////////////////////////////////////////
+#if AP_PROXIMITY_CURVEFIT_ENABLED
+    AP_Proximity_CurveFit *curvefit;
+    static const struct AP_Param::GroupInfo *curvefit_var_info; 
+#endif
+    ///////////////////////////////////////////////////////////////////////////////////
+
     // Check if Obstacle defined by body-frame yaw and pitch is near ground
     bool check_obstacle_near_ground(float pitch, float yaw, float distance) const;
 
@@ -229,6 +239,10 @@ private:
     AP_Float _filt_freq;                               // cutoff frequency for low pass filter
     AP_Float _alt_min;                                 // Minimum altitude -in meters- below which proximity should not work.
 
+#if AP_PROXIMITY_CURVEFIT_ENABLED
+    AP_Float _flatness_threshold;
+
+#endif
     // get alt from rangefinder in meters. This reading is corrected for vehicle tilt
     bool get_rangefinder_alt(float &alt_m) const;
 

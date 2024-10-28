@@ -15,7 +15,6 @@
 #pragma once
 
 #include "AP_Proximity.h"
-
 #if HAL_PROXIMITY_ENABLED
 #include <AP_Common/AP_Common.h>
 #include <AP_HAL/Semaphores.h>
@@ -78,7 +77,7 @@ protected:
     static void database_push(float angle, float distance) {
         database_push(angle, 0.0f, distance);
     }
-
+        
     static void database_push(float angle, float distance, uint32_t timestamp_ms, const Vector3f &current_pos, const Matrix3f &body_to_ned) {
         database_push(angle, 0.0f, distance, timestamp_ms, current_pos, body_to_ned);
     };
