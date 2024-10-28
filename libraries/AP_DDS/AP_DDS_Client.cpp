@@ -638,10 +638,12 @@ void AP_DDS_Client::on_topic(uxrSession* uxr_session, uxrObjectId object_id, uin
             if (strcmp(rx_attached_state_topic.data, "attached")==0) 
             {
                 AP_DDS_Client::attached_state = true;
+                GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL,"ATTACHED");
             } 
             else if (strcmp(rx_attached_state_topic.data, "detached")==0)
             {
                 AP_DDS_Client::attached_state = false;
+                GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL,"DETACHED");
             } 
             else 
             {

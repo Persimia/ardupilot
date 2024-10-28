@@ -65,6 +65,8 @@ private:
         SCAN_HIGH_ANGLE = 99
     };
 
+    int32_t n_dupl = 0;
+
     // initialise sensor
     void initialise();
 
