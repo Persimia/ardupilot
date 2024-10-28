@@ -176,7 +176,7 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
 #endif
     // // Set auto yaw... auto yaw is used in auto modes normally, so we shouldn't do that here
     auto_yaw.set_mode(AutoYaw::Mode::HOLD);
-    _last_yaw_deg = ahrs.get_yaw()*DEG_TO_RAD;
+    _last_yaw_deg = ahrs.get_yaw()*RAD_TO_DEG;
 
     return true;
 }
@@ -377,15 +377,25 @@ void ModeLoiterAssisted::run()
             // Get Yaw angle and distance to closest object from AP_Proximity
             float yaw_to_obs_deg; // yaw angle is measured in the local frame
             float dist_to_obs_m;
-            bool found_obstacle = g2.proximity.get_closest_object(yaw_to_obs_deg, dist_to_obs_m);
-            if (millis()-_time_since_last_yaw > 1) {
-                _yaw_buf.addYaw(ahrs.get_yaw()); // add the current yaw to the buffer
-                _time_since_last_yaw = millis();
+            float targ_heading_rad;
+            
+            bool found_obstacle = g2.proximity.curvefit->get_target(targ_heading_rad, dist_to_obs_m);
+            if (!found_obstacle) {
+                found_obstacle = g2.proximity.get_closest_object(yaw_to_obs_deg, dist_to_obs_m);
+            } else {
+                yaw_to_obs_deg = (targ_heading_rad - ahrs.get_yaw())*RAD_TO_DEG;
             }
-            float delayed_yaw = 0.0f; 
-            if (_yaw_buf.getDelayedYaw(_mtn_cmp_ms.get(), delayed_yaw)) {
-                yaw_to_obs_deg += (delayed_yaw - ahrs.get_yaw()); // get the adjusted offset
-            }
+            // !!!!!!!!!!!!!!!!!!! TODO FIX FOR AHRS.GET_YAW() MISHAP !!!!!!!!!!!!!!!!!
+            // hgjfkghjdfkghdfk
+            // if (millis()-_time_since_last_yaw > 1) {
+            //     _yaw_buf.addYaw(ahrs.get_yaw()); // add the current yaw to the buffer
+            //     _time_since_last_yaw = millis();
+            // }
+            // float delayed_yaw = 0.0f; 
+            // if (_yaw_buf.getDelayedYaw(_mtn_cmp_ms.get(), delayed_yaw)) {
+            //     yaw_to_obs_deg += (delayed_yaw - ahrs.get_yaw()); // get the adjusted offset
+            // }
+            // !!!!!!!!!!!!!!!!!!! TODO FIX FOR AHRS.GET_YAW() MISHAP !!!!!!!!!!!!!!!!!
             yaw_to_obs_deg = wrap_180(yaw_to_obs_deg);
             
             
@@ -405,7 +415,7 @@ void ModeLoiterAssisted::run()
                 }
 
                 // propogate vehicle movements to yaw estimate
-                float delta_yaw = ahrs.get_yaw()*DEG_TO_RAD - _last_yaw_deg;
+                float delta_yaw = ahrs.get_yaw()*RAD_TO_DEG - _last_yaw_deg;
                 float filt_yaw_cmd_deg = _last_yaw_cmd_deg - delta_yaw; // subtract change in yaw from vehicle motion
 
                 // propogate vehicle movements to dist estimate
@@ -539,7 +549,7 @@ void ModeLoiterAssisted::run()
                     int8_t direction = (filt_yaw_cmd_deg >= 0 ? 1.0 : -1.0);
                     auto_yaw.set_fixed_yaw(abs(filt_yaw_cmd_deg), 0.0f, direction, true);
                     _last_yaw_cmd_deg = filt_yaw_cmd_deg;
-                    _last_yaw_deg = ahrs.get_yaw()*DEG_TO_RAD;
+                    _last_yaw_deg = ahrs.get_yaw()*RAD_TO_DEG;
                     _last_yaw_update_ms = millis();
                 }
                 // END YAW CONTROLLER //

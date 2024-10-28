@@ -15,7 +15,7 @@
 //#define MODE_GUIDED_ENABLED   DISABLED            // disable guided mode support
 //#define MODE_GUIDED_NOGPS_ENABLED   DISABLED      // disable guided/nogps mode support
 //#define MODE_LOITER_ENABLED   DISABLED            // disable loiter mode support
-#define MODE_LOITER_ASSISTED_ENABLED DISABLED     // disable loiter_assisted_mode_support
+// #define MODE_LOITER_ASSISTED_ENABLED DISABLED     // disable loiter_assisted_mode_support
 //#define MODE_DOCK_ENABLED       DISABLED            // disable dock mode support
 //#define MODE_POSHOLD_ENABLED  DISABLED            // disable poshold mode support
 //#define MODE_RTL_ENABLED      DISABLED            // disable rtl mode support
