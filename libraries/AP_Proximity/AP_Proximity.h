@@ -205,9 +205,9 @@ public:
     ///////////////////////////////////////////////////////////////////////////////////
     // Curve Fit
     ///////////////////////////////////////////////////////////////////////////////////
-#if AP_PROXIMITY_CURVEFIT_ENABLED == 1
-    AP_Proximity_CurveFit curvefit; //Copy of curve_fit that is used for computation
-    AP_Proximity_CurveFit _curvefit; //Copy of curve_fit that is filled with data
+#if AP_PROXIMITY_CURVEFIT_ENABLED
+    AP_Proximity_CurveFit *curvefit;
+    static const struct AP_Param::GroupInfo *curvefit_var_info; 
 #endif
     ///////////////////////////////////////////////////////////////////////////////////
 
@@ -239,6 +239,10 @@ private:
     AP_Float _filt_freq;                               // cutoff frequency for low pass filter
     AP_Float _alt_min;                                 // Minimum altitude -in meters- below which proximity should not work.
 
+#if AP_PROXIMITY_CURVEFIT_ENABLED
+    AP_Float _flatness_threshold;
+
+#endif
     // get alt from rangefinder in meters. This reading is corrected for vehicle tilt
     bool get_rangefinder_alt(float &alt_m) const;
 

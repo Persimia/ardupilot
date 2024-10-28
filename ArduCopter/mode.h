@@ -1773,6 +1773,7 @@ private:
     float cos_yaw_obst;
     double distance_target;
     bool target_acquired;
+    uint32_t last_gcs_message;
 
     // Parameters
     AP_Float dock_velxy_max;

@@ -77,11 +77,6 @@ protected:
     static void database_push(float angle, float distance) {
         database_push(angle, 0.0f, distance);
     }
-
-#if AP_PROXIMITY_CURVEFIT_ENABLED == 1
-    // Curvefit //
-    void curvefit_push(float angle, float distance);
-#endif
         
     static void database_push(float angle, float distance, uint32_t timestamp_ms, const Vector3f &current_pos, const Matrix3f &body_to_ned) {
         database_push(angle, 0.0f, distance, timestamp_ms, current_pos, body_to_ned);

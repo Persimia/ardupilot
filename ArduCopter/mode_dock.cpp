@@ -5,6 +5,8 @@
 #define DOCK_VELXY_MAX_DEFAULT 200.0
 #define DOCK_MIN_DIST_DEFAULT 100.0
 
+#define CLOSED_LOOP true
+
 /*
  * Init and run calls for dock flight mode
  */
@@ -61,6 +63,8 @@ bool ModeDock::init(bool ignore_checks)
 
     // last_update of lidar data
     last_update_ms = millis();
+    // last_gcs_meaasge
+    last_gcs_message = last_update_ms; 
 
     // Obstacle Heading Vector
     sin_yaw_obst = sinf(ahrs.get_yaw());
@@ -120,6 +124,30 @@ void ModeDock::run()
     if (copter.ap.land_complete_maybe) {
         loiter_nav->soften_for_landing();
     }
+#if !CLOSED_LOOP
+    // Data Collection only
+        float yaw_attitude = ahrs.get_yaw();
+        float yaw_to_obst_deg;
+        float dist_to_obst_m;
+
+    if(g2.proximity.get_closest_object(yaw_to_obst_deg, dist_to_obst_m)){
+        // YAW CONTROLLER //
+
+        float heading_obst = wrap_PI(yaw_attitude + yaw_to_obst_deg*DEG_TO_RAD);
+#if AP_PROXIMITY_CURVEFIT_ENABLED == 1
+        //////////////////////////////////////////////////////////////////////////////////////////////////
+        // Curve Fit                                                                                    //
+        //////////////////////////////////////////////////////////////////////////////////////////////////
+        // Use curvefit to get an improved heading estimate
+        g2.proximity.curvefit->get_target(heading_obst,dist_to_obst_m);
+        uint32_t current_gcs_message = millis();
+        if(current_gcs_message - last_gcs_message > 200){
+            gcs().send_named_float("CenterType",float(g2.proximity.curvefit->get_center_type()));
+            last_gcs_message = current_gcs_message;
+        }
+#endif
+    }
+#endif
 
     // Loiter State Machine Determination
     AltHoldModeState flight_state = get_alt_hold_state(target_climb_rate);
@@ -171,32 +199,40 @@ void ModeDock::run()
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
         AC_AttitudeControl::HeadingCommand heading_cmd;
-        Vector2f target_vel_xy = get_pilot_desired_velocity_xy(dock_velxy_max.get());
-        // Get Yaw angle and distance to closest object from AP_Proximity
-        float yaw_to_obst_deg;
-        float dist_to_obst_m;
         Vector3f thrust_vector;
 
+#if CLOSED_LOOP
+        // Get Yaw angle and distance to closest object from AP_Proximity
+        float yaw_attitude = ahrs.get_yaw();
+        float yaw_to_obst_deg;
+        float dist_to_obst_m;
+        Vector2f target_vel_xy = get_pilot_desired_velocity_xy(dock_velxy_max.get());
         if(g2.proximity.get_closest_object(yaw_to_obst_deg, dist_to_obst_m)){
             // YAW CONTROLLER //
-
-            float heading_obst = wrap_PI(ahrs.get_yaw() + yaw_to_obst_deg*DEG_TO_RAD);
-            sin_yaw_obst = sinf(heading_obst);
-            cos_yaw_obst = cosf(heading_obst);
+            yaw_to_obst_deg = wrap_180(yaw_to_obst_deg);
+            float heading_obst = wrap_PI(yaw_attitude + yaw_to_obst_deg*DEG_TO_RAD);
 
             //////////////////////////////////////////////////////////////////////////////////////////////////
             // Curve Fit                                                                                    //
             //////////////////////////////////////////////////////////////////////////////////////////////////
             // Use curvefit to get an improved heading estimate
 #if AP_PROXIMITY_CURVEFIT_ENABLED == 1
-            Vector2f curr_pos;
-            if(ahrs.get_relative_position_NE_home(curr_pos)){
-                g2.proximity.curvefit.get_target(yaw_to_obst_deg,dist_to_obst_m,curr_pos); //Get improved estimate
+            if(g2.proximity.curvefit->angle_within_bound(yaw_to_obst_deg)){
+                g2.proximity.curvefit->get_target(heading_obst,dist_to_obst_m); //Get improved estimate
+            }
+            
+            uint32_t current_gcs_message = millis();
+            if(current_gcs_message - last_gcs_message > 200){
+                gcs().send_named_float("CenterType",float(g2.proximity.curvefit->get_center_type()));
+                last_gcs_message = current_gcs_message;
             }
 #endif
 
+            sin_yaw_obst = sinf(heading_obst);
+            cos_yaw_obst = cosf(heading_obst);
+
             // Use auto yaw only if yaw error is large //
-            if(yaw_to_obst_deg > 10.0){
+            if(abs(yaw_to_obst_deg) > 22.5){
                 /*Update the heading controller at a low rate (this is because the auto yaw controller uses
                 a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/ 
                 uint32_t cur_time_ms = millis();
@@ -271,6 +307,13 @@ void ModeDock::run()
 
             thrust_vector = loiter_nav->get_thrust_vector();
         }
+#else
+        heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Rate_Only;
+        heading_cmd.yaw_rate_cds = target_yaw_rate;
+        loiter_nav->update(); // false => don't run obstacle avoidance
+        thrust_vector = loiter_nav->get_thrust_vector();
+
+#endif
         // call attitude controller
         attitude_control->input_thrust_vector_heading(thrust_vector, heading_cmd);
 

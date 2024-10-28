@@ -144,6 +144,14 @@ void AP_Proximity_LightWareSF45B::process_message()
         const float distance_m = _distance_filt.apply((int16_t)UINT16_VALUE(_msg.payload[1], _msg.payload[0])) * 0.01f;
         const float angle_deg = correct_angle_for_orientation((int16_t)UINT16_VALUE(_msg.payload[3], _msg.payload[2]) * 0.01f);
 
+#if AP_PROXIMITY_CURVEFIT_ENABLED
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // curve fit
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            frontend.curvefit->add_point(angle_deg, distance_m); //add data
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#endif
+
         // if distance is from a new face then update distance, angle and boundary for previous face
         // get face from 3D boundary based on yaw angle to the object
         const AP_Proximity_Boundary_3D::Face face = frontend.boundary.get_face(angle_deg);
@@ -154,22 +162,6 @@ void AP_Proximity_LightWareSF45B::process_message()
                 // mark previous face invalid
                 frontend.boundary.reset_face(_face, state.instance);
             }
-
-        ///////////////////////////////////////////////////////////////////////////////////////////////////
-        // curve fit
-        ///////////////////////////////////////////////////////////////////////////////////////////////////
-#if AP_PROXIMITY_CURVEFIT_ENABLED == 1
-        // TODO: Generalize to user specified min and max angle.
-            if (face.sector == 0){
-                // if switching into sector 0
-                frontend._curvefit.reset(); //reset _curvefit to accept new data. 
-            }
-            if (_face.sector == 0){
-                // if switching out of sector 0 copy data to curvefit
-                frontend.curvefit = AP_Proximity_CurveFit{frontend._curvefit};
-            }
-#endif
-        // end curve fit ////////////////////////////////////////////////////////////////////////////////////
 
             // record updated face
             _face = face;
@@ -199,17 +191,6 @@ void AP_Proximity_LightWareSF45B::process_message()
                 _face_distance = distance_m;
                 _face_distance_valid = true;
             }
-
-            //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            // curve fit
-            //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#if AP_PROXIMITY_CURVEFIT_ENABLED == 1
-            // TODO: Generalize to use user configured min and max angle 
-            if(face.sector == 0) {
-                curvefit_push(angle_deg * DEG_TO_RAD, distance_m); //add data
-            }
-#endif
-            ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             // update shortest distance for this mini sector
             if (distance_m < _minisector_distance) {
