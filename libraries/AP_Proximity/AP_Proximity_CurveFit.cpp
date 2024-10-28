@@ -15,14 +15,14 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Description: Minimum nunber of data points to be consideredd a surface
     // @Values: 1, 255
     // @User: Advanced
-    AP_GROUPINFO("_MINPTS", 1, AP_Proximity_CurveFit, _min_pts, 20),
+    AP_GROUPINFO("_MINPTS", 1, AP_Proximity_CurveFit, _min_pts, 10),
 
     // @Param{Copter}: _FLAT
     // @DisplayName: Proximity Curvefit Flatness Threshold
     // @Description: maximum  value of det(A) to be considered flat
     // @Values: 0.1, 20000.00
     // @User: Advanced
-    AP_GROUPINFO("_FLAT", 2, AP_Proximity_CurveFit, _flatness_threshold, 1),
+    AP_GROUPINFO("_FLAT", 2, AP_Proximity_CurveFit, _flatness_threshold, 20),
 
     // @Param{Copter}: _DISC
     // @DisplayName: Proximity Curvefit Discontinuity Threshold
@@ -44,7 +44,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Description: maximum  value of det(A) to be considered flat
     // @Values: 0.1, 20000.00
     // @User: Advanced
-    AP_GROUPINFO("_CNRWIN", 5, AP_Proximity_CurveFit, _corner_window, 10),
+    AP_GROUPINFO("_CNRWIN", 5, AP_Proximity_CurveFit, _corner_window, 5),
 
 
     // @Param{Copter}: _ANGMIN
@@ -53,7 +53,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Values: -90, -5
     // @Units: deg  
     // @User: Advanced
-    AP_GROUPINFO("_ANGMIN", 6, AP_Proximity_CurveFit, _angle_min_deg, -22.5),
+    AP_GROUPINFO("_ANGMIN", 6, AP_Proximity_CurveFit, _angle_min_deg, -30),
     
     // @Param{Copter}: _ANGMAX
     // @DisplayName: Proximity Curvefit Maximum Angle
@@ -61,7 +61,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Values: 5, 90
     // @Units: deg
     // @User: Advanced
-    AP_GROUPINFO("_ANGMAX", 7, AP_Proximity_CurveFit, _angle_max_deg, 22.5),
+    AP_GROUPINFO("_ANGMAX", 7, AP_Proximity_CurveFit, _angle_max_deg, 30),
 
     // @Param{Copter}: _RNGMIN
     // @DisplayName: Proximity Curvefit Minimum Range
