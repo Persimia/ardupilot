@@ -27,7 +27,8 @@ class AP_Proximity_CurveFit
         POINT,
         CIRCLE_CONVEX,
         LINE,
-        CIRCLE_CONCAVE
+        CIRCLE_CONCAVE,
+        CORNER,
     } CenterType;
 
 public:
@@ -82,6 +83,8 @@ private:
     // return true if line could be fit through data.
     // set center and radius properties
     bool solve_line(const AP_Proximity_CurveFit::Coefficients c);
+
+    void find_closest_index(const Vector2f reference);
 
     Vector2f data[2*CURVEFIT_DATA_LEN];
     int read_start = 0;

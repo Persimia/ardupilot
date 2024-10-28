@@ -69,7 +69,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Values: 0.5, 50
     // @Units m
     // @User: Advanced
-    AP_GROUPINFO("_RNGMIN", 8, AP_Proximity_CurveFit, _rng_min_m, 0.5),
+    AP_GROUPINFO("_RNGMIN", 8, AP_Proximity_CurveFit, _rng_min_m, 0.2),
     
     // @Param{Copter}: _RNGMAX
     // @DisplayName: Proximity Curvefit Maximum Range
@@ -104,6 +104,10 @@ bool AP_Proximity_CurveFit::get_target(float &heading, float &distance)
     Vector2f r_pos_center = center - curr_pos + reference_point;
     switch (center_type)
     {
+    case AP_Proximity_CurveFit::CenterType::CORNER:
+    {
+        FALLTHROUGH;
+    }
     case AP_Proximity_CurveFit::CenterType::POINT:
     {
         distance = r_pos_center.length();
@@ -143,6 +147,7 @@ bool AP_Proximity_CurveFit::get_target(float &heading, float &distance)
 
 bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
 {
+    find_closest_index(reference);
     truncate_data();
     if(read_end == read_start){
         // No Data
@@ -167,7 +172,7 @@ bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
 
     if(detect_corner()){
         // Point
-        center_type = AP_Proximity_CurveFit::CenterType::POINT;
+        center_type = AP_Proximity_CurveFit::CenterType::CORNER;
         center = data[closest_index]-reference_point;
         radius = 0.0;
         log_fit();
@@ -293,23 +298,15 @@ void AP_Proximity_CurveFit::add_point(float angle_deg, float distance)
                 point.x = distance*cosf(angle_deg*DEG_TO_RAD+yaw) + current_position.x;
                 point.y = distance*sinf(angle_deg*DEG_TO_RAD+yaw) + current_position.y;
 
-                if(abs(distance - last_distance)<QUANTIZATION){
-                // if the distance is duplicated due to quantization then update the present data point to reflect the average;
-                    avg_count += 1.0f;
-                    data[write_end] = (data[write_end]*(avg_count - 1.0f) + point)/avg_count;
-                }
-                else{
-                // add the point to the end of the data set
-                    avg_count = 1.0f;
-                    data[write_end] = point;
-                    last_distance = distance;
-                    // update closest distance
-                    if (distance <= closest_distance_){
-                        closest_distance_ = distance;
-                        closest_index_ = write_end;
-                    }
-                    write_end += 1;
-                }
+                data[write_end] = point;
+                last_distance = distance;
+                // update closest distance
+                //if (distance <= closest_distance_){
+                //    closest_distance_ = distance;
+                //    closest_index_ = write_end;
+                //}
+                write_end += 1;
+                
             }
         }
     }
@@ -412,6 +409,20 @@ void AP_Proximity_CurveFit::compute_coefficients(AP_Proximity_CurveFit::Coeffici
         c.n += 1;
     }
 }
+
+void AP_Proximity_CurveFit::find_closest_index(const Vector2f reference){
+    float closest_distance = (data[read_start] - reference).length_squared();
+    closest_index = read_start;
+    for(int i=read_start+1; i<read_end; i++){
+        float distance = (data[i] - reference).length_squared();
+        if(distance < closest_distance){
+            closest_index = i;
+            closest_distance = distance;
+        }
+    }
+
+}
+
 
 void AP_Proximity_CurveFit::reset()
 {

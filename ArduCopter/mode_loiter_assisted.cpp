@@ -280,6 +280,16 @@ void ModeLoiterAssisted::precision_loiter_xy()
 // should be called at 100hz or more
 void ModeLoiterAssisted::run()
 {
+    // TODO REMOVE
+    float delete_me;
+    float delete_me_too;
+
+    bool test = g2.proximity.curvefit->get_target(delete_me, delete_me_too);
+    if (!test){
+        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "No Obs")
+    }
+
+
     float target_roll, target_pitch;
     float target_yaw_rate = 0.0f;
     float target_climb_rate = 0.0f;
@@ -428,7 +438,7 @@ void ModeLoiterAssisted::run()
                 // ::fprintf(stderr,"yaw: %f\tdyaw: %f\tdist: %f\t ddsit: %f\n",filt_yaw_cmd_deg,delta_yaw,filt_dist_to_obs_m,delta_dist);
                 
 
-                // cnew data in, compute absolute position of obstacle
+                // new data in, compute absolute position of obstacle
                 if (!is_equal(yaw_to_obs_deg,_last_yaw_to_obs_deg) || !is_equal(dist_to_obs_m,_last_dist_to_obs_m)){ // when new lidar data comes in
                     _last_yaw_to_obs_deg = yaw_to_obs_deg;
                     _last_dist_to_obs_m = dist_to_obs_m;
