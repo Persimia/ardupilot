@@ -161,7 +161,7 @@ bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
     
     reference_point = Vector2f(reference);
     
-    if(read_end - read_start < _min_pts.get()){
+    if(read_end + 1 - read_start < _min_pts.get()){
        // Point
         center_type = AP_Proximity_CurveFit::CenterType::POINT;
         center = data[closest_index]-reference_point;
@@ -329,9 +329,9 @@ void AP_Proximity_CurveFit::truncate_data()
 
     Vector2f normal_dir = (data[closest_index] - reference_point).normalized();
     // Check for discontinuity and truncate data 
-    for(int i = closest_index; i < read_end-1; i++){
+    for(int i = closest_index; i < read_end; i++){
         if(normal_dir.dot(data[i+1] - data[i]) > _discontinuity_threshold.get()){
-            read_end = i+1;
+            read_end = i;
             break;
         }
     }
@@ -357,7 +357,7 @@ bool AP_Proximity_CurveFit::detect_corner(){
     int corner_window = _corner_window.get()/2;
     Vector2f v;
     for(int i = 1; i <= corner_window; i++){
-        if(closest_index + i < read_end){
+        if(closest_index + i < read_end + 1){
             v = data[closest_index + i] - data[closest_index];
         }
         else{
@@ -394,7 +394,7 @@ bool AP_Proximity_CurveFit::detect_corner(){
 
 void AP_Proximity_CurveFit::compute_coefficients(AP_Proximity_CurveFit::Coefficients &c)
 {   
-    for(int it = read_start; it < read_end; it++){
+    for(int it = read_start; it < read_end + 1; it++){
         float x = data[it].x - reference_point.x;
         float y = data[it].y - reference_point.y;
         c.Sum_x += x;
@@ -413,7 +413,7 @@ void AP_Proximity_CurveFit::compute_coefficients(AP_Proximity_CurveFit::Coeffici
 void AP_Proximity_CurveFit::find_closest_index(const Vector2f reference){
     float closest_distance = (data[read_start] - reference).length_squared();
     closest_index = read_start;
-    for(int i=read_start+1; i<read_end; i++){
+    for(int i = read_start + 1; i < read_end + 1; i++){
         float distance = (data[i] - reference).length_squared();
         if(distance < closest_distance){
             closest_index = i;

@@ -20,7 +20,7 @@
 #define WV_WIND_DEFAULT                      5
 #define WV_THRESH_DEFAULT                    0.1 
 #define DOCK_SPEED_MPS_DEFAULT               0.2
-#define UNDOCK_SPEED_MPS_DEFAULT             30.0
+#define UNDOCK_SPEED_MPS_DEFAULT             1.0
 #define MTN_CMP_MS_DEFAULT                   50
 
 
@@ -280,14 +280,14 @@ void ModeLoiterAssisted::precision_loiter_xy()
 // should be called at 100hz or more
 void ModeLoiterAssisted::run()
 {
-    // TODO REMOVE
-    float delete_me;
-    float delete_me_too;
+    // // TODO REMOVE
+    // float delete_me;
+    // float delete_me_too;
 
-    bool test = g2.proximity.curvefit->get_target(delete_me, delete_me_too);
-    if (!test){
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "No Obs")
-    }
+    // bool test = g2.proximity.curvefit->get_target(delete_me, delete_me_too);
+    // if (!test){
+    //     // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "No Obs")
+    // }
 
 
     float target_roll, target_pitch;
