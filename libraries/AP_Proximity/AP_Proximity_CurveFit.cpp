@@ -159,7 +159,8 @@ bool AP_Proximity_CurveFit::compute_curvature_center(Vector2f reference)
         return true;
     }
     
-    reference_point = Vector2f(reference);
+    // reference_point = Vector2f(reference);
+    reference_point = Vector2f(0,0);
     
     if(read_end - read_start < _min_pts.get()){
        // Point

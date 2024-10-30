@@ -280,14 +280,14 @@ void ModeLoiterAssisted::precision_loiter_xy()
 // should be called at 100hz or more
 void ModeLoiterAssisted::run()
 {
-    // // TODO REMOVE
-    // float delete_me;
-    // float delete_me_too;
+    // TODO REMOVE
+    float delete_me;
+    float delete_me_too;
 
-    // bool test = g2.proximity.curvefit->get_target(delete_me, delete_me_too);
-    // if (!test){
-    //     // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "No Obs")
-    // }
+    bool test = g2.proximity.curvefit->get_target(delete_me, delete_me_too);
+    if (!test){
+        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "No Obs")
+    }
 
 
     float target_roll, target_pitch;
