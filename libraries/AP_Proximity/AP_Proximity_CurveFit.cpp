@@ -24,7 +24,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Values: -90, -5
     // @Units: deg  
     // @User: Advanced
-    AP_GROUPINFO("_ANGMIN", 2, AP_Proximity_CurveFit, _angle_min_deg, -170),
+    AP_GROUPINFO("_ANGMIN", 2, AP_Proximity_CurveFit, _angle_min_deg, -30),
     
     // @Param{Copter}: _ANGMAX
     // @DisplayName: Proximity Curvefit Maximum Angle
@@ -32,7 +32,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Values: 5, 90
     // @Units: deg
     // @User: Advanced
-    AP_GROUPINFO("_ANGMAX", 3, AP_Proximity_CurveFit, _angle_max_deg, 170),
+    AP_GROUPINFO("_ANGMAX", 3, AP_Proximity_CurveFit, _angle_max_deg, 30),
 
     // @Param{Copter}: _RNGMIN
     // @DisplayName: Proximity Curvefit Minimum Range
@@ -48,7 +48,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Values: 0.5, 50
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_RNGMAX", 5, AP_Proximity_CurveFit, _rng_max_m, 50),
+    AP_GROUPINFO("_RNGMAX", 5, AP_Proximity_CurveFit, _rng_max_m, 3),
 
     AP_GROUPEND
 };
@@ -171,7 +171,7 @@ bool AP_Proximity_CurveFit::solve_line(AP_Proximity_CurveFit::Coefficients c, Ve
     float trace = cov_xx + cov_yy;
     float determinant = cov_xx * cov_yy - cov_xy * cov_xy;
     if (determinant < 0) {
-        fprintf(stderr, "Warning: Covariance matrix is not positive semi-definite.\n");
+        // fprintf(stderr, "Warning: Covariance matrix is not positive semi-definite.\n");
         return false; // or handle accordingly
     }
     float eigenvalue1 = trace / 2 + std::sqrt(trace * trace / 4 - determinant);
