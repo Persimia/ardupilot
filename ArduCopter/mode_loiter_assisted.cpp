@@ -280,14 +280,17 @@ void ModeLoiterAssisted::precision_loiter_xy()
 // should be called at 100hz or more
 void ModeLoiterAssisted::run()
 {
-    // TODO REMOVE
-    float delete_me;
-    float delete_me_too;
+    // // TODO REMOVE
+    // float surface_heading_rad;
+    // float surface_distance_m;
+    // Vector2f surface_tangent_vec; 
+    // Vector2f surface_normal_vec;
+    // Vector2f surface_center_coords;
 
-    bool test = g2.proximity.curvefit->get_target(delete_me, delete_me_too);
-    if (!test){
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "No Obs")
-    }
+    // bool test = g2.proximity.curvefit->get_target(surface_heading_rad, surface_distance_m, surface_tangent_vec, surface_normal_vec, surface_center_coords);
+    // if (!test){
+    //     // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "No Obs")
+    // }
 
 
     float target_roll, target_pitch;
@@ -385,16 +388,20 @@ void ModeLoiterAssisted::run()
             motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
             // Get Yaw angle and distance to closest object from AP_Proximity
-            float yaw_to_obs_deg; // yaw angle is measured in the local frame
-            float dist_to_obs_m;
-            float targ_heading_rad;
+            float surface_heading_rad;
+            float surface_distance_m;
+            Vector2f surface_tangent_vec; 
+            Vector2f surface_normal_vec;
+            Vector2f surface_center_coords;
+            bool found_obstacle = g2.proximity.curvefit->get_target(surface_heading_rad, surface_distance_m, surface_tangent_vec, surface_normal_vec, surface_center_coords);
             
-            bool found_obstacle = g2.proximity.curvefit->get_target(targ_heading_rad, dist_to_obs_m);
-            if (!found_obstacle) {
-                found_obstacle = g2.proximity.get_closest_object(yaw_to_obs_deg, dist_to_obs_m);
-            } else {
-                yaw_to_obs_deg = (targ_heading_rad - ahrs.get_yaw())*RAD_TO_DEG;
-            }
+            // // Fallback to prox library get_closest_object
+            // if (!found_obstacle) {
+            //     found_obstacle = g2.proximity.get_closest_object(yaw_to_obs_deg, dist_to_obs_m);
+            // } else {
+            //     yaw_to_obs_deg = (targ_heading_rad - ahrs.get_yaw())*RAD_TO_DEG;
+            // }
+
             // !!!!!!!!!!!!!!!!!!! TODO FIX FOR AHRS.GET_YAW() MISHAP !!!!!!!!!!!!!!!!!
             // hgjfkghjdfkghdfk
             // if (millis()-_time_since_last_yaw > 1) {
@@ -406,8 +413,9 @@ void ModeLoiterAssisted::run()
             //     yaw_to_obs_deg += (delayed_yaw - ahrs.get_yaw()); // get the adjusted offset
             // }
             // !!!!!!!!!!!!!!!!!!! TODO FIX FOR AHRS.GET_YAW() MISHAP !!!!!!!!!!!!!!!!!
-            yaw_to_obs_deg = wrap_180(yaw_to_obs_deg);
-            
+
+            float yaw_to_obs_deg = wrap_180((surface_heading_rad-ahrs.get_yaw())*RAD_TO_DEG);
+            float dist_to_obs_m = surface_distance_m;
             
             if (found_obstacle) { // only perform obstacle stuff when obstacles are in, otherwise do regular loiter
                 if(!_target_acquired){// Reacquired target so reset yaw. TODO manage this state better
@@ -423,11 +431,12 @@ void ModeLoiterAssisted::run()
                     GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"No pos estimate!");
                     return; // TODO: What do we even do here? Switch to stabilize?
                 }
-
+                // TODO Reevaluate if this is necessary ===================================
                 // propogate vehicle movements to yaw estimate
                 float delta_yaw = ahrs.get_yaw()*RAD_TO_DEG - _last_yaw_deg;
                 float filt_yaw_cmd_deg = _last_yaw_cmd_deg - delta_yaw; // subtract change in yaw from vehicle motion
 
+                // TODO Reevaluate if this is necessary ===================================
                 // propogate vehicle movements to dist estimate
                 float heading_obs_rad = ahrs.get_yaw() + filt_yaw_cmd_deg*DEG_TO_RAD;
                 float cos_yaw_obs = cosf(heading_obs_rad);
@@ -437,20 +446,24 @@ void ModeLoiterAssisted::run()
                 float filt_dist_to_obs_m = _last_dist_to_obs_m - delta_dist; // subtract change in motion from vehicle
                 // ::fprintf(stderr,"yaw: %f\tdyaw: %f\tdist: %f\t ddsit: %f\n",filt_yaw_cmd_deg,delta_yaw,filt_dist_to_obs_m,delta_dist);
                 
-
+                // TODO Reevaluate if this is necessary ===================================
                 // new data in, compute absolute position of obstacle
                 if (!is_equal(yaw_to_obs_deg,_last_yaw_to_obs_deg) || !is_equal(dist_to_obs_m,_last_dist_to_obs_m)){ // when new lidar data comes in
                     _last_yaw_to_obs_deg = yaw_to_obs_deg;
                     _last_dist_to_obs_m = dist_to_obs_m;
 
-                    // Start tracking global position of nearest point
-                    float pitch_rad = ahrs.get_pitch(); // replace with pitch of sensor
-                    float yaw_rad = yaw_to_obs_deg*DEG_TO_RAD;
+                    // // Start tracking global position of nearest point
+                    // float pitch_rad = ahrs.get_pitch(); // replace with pitch of sensor
+                    // float yaw_rad = yaw_to_obs_deg*DEG_TO_RAD;
 
-                    // Calculate x, y, z using spherical to Cartesian conversion
-                    float x = dist_to_obs_m * cosf(pitch_rad) * cosf(yaw_rad);
-                    float y = dist_to_obs_m * cosf(pitch_rad) * sinf(yaw_rad);
-                    float z = dist_to_obs_m * sinf(pitch_rad);
+                    // // Calculate x, y, z using spherical to Cartesian conversion
+                    // float x = dist_to_obs_m * cosf(pitch_rad) * cosf(yaw_rad);
+                    // float y = dist_to_obs_m * cosf(pitch_rad) * sinf(yaw_rad);
+                    // float z = dist_to_obs_m * sinf(pitch_rad);
+                    // const Vector3f dock_target_vec{x,y,z};
+                    float x = surface_center_coords.x;
+                    float y = surface_center_coords.y;
+                    float z = _current_vehicle_position.z;
                     const Vector3f dock_target_vec{x,y,z};
 
                     Vector3f dock_target_pos = ahrs.body_to_earth(dock_target_vec) + _current_vehicle_position; // this is the NED target pos relative to EKF origin
