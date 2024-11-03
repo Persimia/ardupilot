@@ -280,17 +280,15 @@ void ModeLoiterAssisted::precision_loiter_xy()
 // should be called at 100hz or more
 void ModeLoiterAssisted::run()
 {
-    // TODO REMOVE
-    float surface_heading_rad;
-    float surface_distance_m;
-    Vector2f surface_tangent_vec; 
-    Vector2f surface_normal_vec;
-    Vector2f surface_center_coords;
-
-    bool test = g2.proximity.curvefit->get_target(surface_heading_rad, surface_distance_m, surface_tangent_vec, surface_normal_vec, surface_center_coords);
-    if (!test){
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "No Obs")
-    }
+    // float delete_me_1;
+    // float delete_me_2;
+    // Vector2f delete_me_3; 
+    // Vector2f delete_me_4;
+    // Vector2f delete_me_5;
+    // bool test = g2.proximity.curvefit->get_target(delete_me_1, delete_me_2, delete_me_3, delete_me_4, delete_me_5);
+    // if (!test){
+    //     // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "No Obs")
+    // }
 
 
     float target_roll, target_pitch;
@@ -388,12 +386,14 @@ void ModeLoiterAssisted::run()
             motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
             // Get Yaw angle and distance to closest object from AP_Proximity
-            float delete_me_1;
-            float delete_me_2;
-            Vector2f delete_me_3; 
-            Vector2f delete_me_4;
-            Vector2f delete_me_5;
-            bool found_obstacle = g2.proximity.curvefit->get_target(delete_me_1, delete_me_2, delete_me_3, delete_me_4, delete_me_5);
+            float surface_heading_rad;
+            float surface_distance_m;
+            Vector2f surface_tangent_vec; 
+            Vector2f surface_normal_vec;
+            Vector2f surface_center_coords;
+
+            bool found_obstacle = g2.proximity.curvefit->get_target(surface_heading_rad, surface_distance_m, surface_tangent_vec, surface_normal_vec, surface_center_coords);
+   
             
             // // Fallback to prox library get_closest_object
             // if (!found_obstacle) {

@@ -50,21 +50,41 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("_RNGMAX", 5, AP_Proximity_CurveFit, _rng_max_m, 3),
 
+    // @Param{Copter}: _LDR_HZ
+    // @DisplayName: Lidar sweep rate in Hz
+    // @Description: Lidar sweep rate in Hz
+    // @Units: hz
+    // @User: Advanced
+    AP_GROUPINFO("_LDR_HZ", 6, AP_Proximity_CurveFit, _lidar_sweep_rate_hz, 3.73),
+
+    // @Param{Copter}: _CNTR_HZ
+    // @DisplayName: Center position cutoff filter hz
+    // @Description: Center position cutoff filter hz
+    // @Units: hz
+    // @User: Advanced
+    AP_GROUPINFO("_CNTR_HZ", 7, AP_Proximity_CurveFit, _center_filter_cutoff_hz, 1),
+
     AP_GROUPEND
 };
 
 AP_Proximity_CurveFit::AP_Proximity_CurveFit()
 {
     AP_Param::setup_object_defaults(this, var_info);
+    _center_filter.set_cutoff_frequency(_lidar_sweep_rate_hz, _center_filter_cutoff_hz); // TODO: use custom dock hz param
+
 }
 
 
 bool AP_Proximity_CurveFit::get_target(float &heading, float &distance, Vector2f &tangent_vec, Vector2f &normal_vec, Vector2f &center)
 {
     Vector2f curr_pos;
-    if(!AP::ahrs().get_relative_position_NE_origin(curr_pos)){return false;} // No Position Estimate
-    if(!compute_fit(curr_pos, _tangent_vec, _normal_vec, _center, _fit_quality, _fit_type, _fit_num)){return false;}// Unable to solve heading, distance
 
+    if(!AP::ahrs().get_relative_position_NE_origin(curr_pos)){
+        _center_filter.reset();
+        return false;} // No Position Estimate
+    if(!compute_fit(curr_pos, _tangent_vec, _normal_vec, _center, _fit_quality, _fit_type, _fit_num)){
+        _center_filter.reset();
+        return false;}// Unable to solve heading, distance
     // Vector from vehicle position to center of curvature;
     Vector2f r_pos_center = _center - curr_pos;
     switch (_fit_type)
@@ -106,6 +126,9 @@ bool AP_Proximity_CurveFit::compute_fit(Vector2f curr_pos,
         if(solve_line(coefficients, curr_pos, tangent_vec, normal_vec, center, fit_quality))
         {//Try to fit a line
             fit_type = AP_Proximity_CurveFit::CenterType::LINE;
+            // Vector2f old_center = center;
+            center = _center_filter.apply(center);
+            // fprintf(stderr, "Unfilt: %.4f, %.4f\t Filt: %.4f, %.4f\n",old_center.x, old_center.y, center.x, center.y);
             log_fit(center, normal_vec, fit_quality, fit_num);
             return true;
         }
@@ -114,6 +137,9 @@ bool AP_Proximity_CurveFit::compute_fit(Vector2f curr_pos,
     if (solve_point(curr_pos, fit_num, tangent_vec, normal_vec, center, fit_quality))
     {
         fit_type = AP_Proximity_CurveFit::CenterType::POINT;
+        // Vector2f old_center = center;
+        center = _center_filter.apply(center);
+        // fprintf(stderr, "Unfilt: %.4f, %.4f\t Filt: %.4f, %.4f\n",old_center.x, old_center.y, center.x, center.y);
         log_fit(center, normal_vec, fit_quality, fit_num);
         return true;
     }
@@ -207,29 +233,53 @@ bool AP_Proximity_CurveFit::solve_line(AP_Proximity_CurveFit::Coefficients c, Ve
 void AP_Proximity_CurveFit::add_point(float angle_deg, float distance)
 {
     angle_deg = wrap_180(angle_deg);
+    uint8_t dir = (_last_angle < angle_deg) ? 1 : (_last_angle > angle_deg ? -1 : 0);
+
     // check if angle is within range
     if(angle_deg > _angle_min_deg.get() && angle_deg < _angle_max_deg.get()){
-        if(distance > _rng_min_m.get() && distance < _rng_max_m.get() && _write_end < _write_start + CURVEFIT_DATA_LEN){
-            Vector2f current_position;
-            if(AP::ahrs().get_relative_position_NE_origin(current_position)){
-                // compute point in Global NE frame
-                Vector2f point;
-                float pitch_rad = AP::ahrs().get_pitch(); // replace with pitch of sensor
-                float yaw_rad = AP::ahrs().get_yaw();
-                point.x = distance * cosf(pitch_rad) * cosf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.x;
-                point.y = distance * cosf(pitch_rad) * sinf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.y;
+        if(distance > _rng_min_m.get() && distance < _rng_max_m.get()){
+            if (_write_end < _write_start + CURVEFIT_DATA_LEN){
+                Vector2f current_position;
+                if(AP::ahrs().get_relative_position_NE_origin(current_position)){
+                    // compute point in Global NE frame
+                    Vector2f point;
+                    float pitch_rad = AP::ahrs().get_pitch(); // replace with pitch of sensor
+                    float yaw_rad = AP::ahrs().get_yaw();
+                    point.x = distance * cosf(pitch_rad) * cosf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.x;
+                    point.y = distance * cosf(pitch_rad) * sinf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.y;
 
-                _points_NE_origin[_write_end] = point;
-                _write_end += 1;
+                    _points_NE_origin[_write_end] = point;
+                    _write_end += 1;
+                }
+            } else {
+                gcs().send_text(MAV_SEVERITY_CRITICAL, "CFIT BUFFER FULL!");
             }
-        }
+        }        
     }
     //reset when angle goes out of range
     //this indicates that a new scan is availible and moves the _write_start in preparation for the next scan
     else if(_last_angle > _angle_min_deg.get() && _last_angle < _angle_max_deg.get()){
         reset();
+        _reset_flag = true;
     }
+    if (dir != _last_dir) { // if direction changes, we want to reset if we haven't already
+        if (!_reset_flag) {
+            if (!_first_time_range_error) { // ignore the first one because we can't know first dir
+                gcs().send_text(MAV_SEVERITY_CRITICAL, "CFIT ANG RANGE TOO BIG!"); 
+                // maybe we don't need to alert anyone since we're doing the reset here anyway?
+                reset();
+            }
+            else {
+                _first_time_range_error = false;
+            }
+        } else {
+            _reset_flag = false;
+        }
+        
+    }
+
     _last_angle = angle_deg;
+    _last_dir = dir;
     return;
 }
 

@@ -2,6 +2,7 @@
 #include "AP_Proximity_config.h"
 #include <AP_Common/AP_Common.h>
 #include <AP_Math/AP_Math.h>
+#include <Filter/LowPassFilter.h>
 
 #define CURVEFIT_DATA_LEN 150
 
@@ -95,6 +96,9 @@ private:
     int _write_end = CURVEFIT_DATA_LEN;
 
     float _last_angle;
+    uint8_t _last_dir;
+    bool _reset_flag;
+    bool _first_time_range_error{true};
 
     uint8_t _min_req_for_line{3};
 
@@ -106,16 +110,18 @@ private:
     Vector2f _tangent_vec;
 
     //Parameters
-    AP_Int16 _min_pts;
-    AP_Float _flatness_threshold;  // Threshold for det(A)/n^3 that should be counted as flat
     AP_Float _discontinuity_threshold;
     AP_Float _angle_min_deg;
     AP_Float _angle_max_deg;
     AP_Float _rng_max_m;
     AP_Float _rng_min_m;
+    AP_Float _lidar_sweep_rate_hz;
+    AP_Float _center_filter_cutoff_hz;
 
     float _fit_quality;
     int _fit_num;
+
+    LowPassFilterVector2f _center_filter;
 };
 
 #endif
