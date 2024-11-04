@@ -417,9 +417,8 @@ void ModeLoiterAssisted::run()
                     float x = surface_center_coords.x;
                     float y = surface_center_coords.y;
                     float z = _current_vehicle_position.z;
-                    const Vector3f dock_target_vec{x,y,z};
+                    const Vector3f dock_target_pos{x,y,z};
 
-                    Vector3f dock_target_pos = ahrs.body_to_earth(dock_target_vec) + _current_vehicle_position; // this is the NED target pos relative to EKF origin
                     _filt_dock_target_pos = _dock_target_pos_filter.apply(dock_target_pos); // this is currently filtering something that is already filtered by curvefit (TODO Fix)
                     
                     _ready_to_dock = false;
@@ -434,8 +433,8 @@ void ModeLoiterAssisted::run()
                 float filt_heading_cmd_deg = _yaw_filter.apply(heading_to_obs_deg);
                 float filt_dist_to_obs_m = _dist_filter.apply(dist_to_obs_m);
                 
-                float cos_heading_obs = cosf(filt_heading_cmd_deg);
-                float sin_heading_obs = sinf(filt_heading_cmd_deg);
+                float cos_heading_obs = cosf(filt_heading_cmd_deg * DEG_TO_RAD);
+                float sin_heading_obs = sinf(filt_heading_cmd_deg * DEG_TO_RAD);
 
                 Vector2f vec_to_target_2d_m = _filt_dock_target_pos.xy() - _current_vehicle_position.xy();
 

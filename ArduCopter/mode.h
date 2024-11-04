@@ -1371,8 +1371,8 @@ private:
 
     uint32_t _last_yaw_update_ms;
 
-    float _last_heading_to_obs_deg;
-    float _last_dist_to_obs_m;
+    float _last_surface_center_coords_x;
+    float _last_surface_center_coords_y;
 
     Vector2f _last_vehicle_pos;
 
