@@ -174,9 +174,6 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
 #if AC_PRECLAND_ENABLED
     _precision_loiter_active = false;
 #endif
-    // // Set auto yaw... auto yaw is used in auto modes normally, so we shouldn't do that here
-    auto_yaw.set_mode(AutoYaw::Mode::HOLD);
-    _last_yaw_deg = ahrs.get_yaw()*RAD_TO_DEG;
 
     return true;
 }
@@ -393,28 +390,8 @@ void ModeLoiterAssisted::run()
             Vector2f surface_center_coords;
 
             bool found_obstacle = g2.proximity.curvefit->get_target(surface_heading_rad, surface_distance_m, surface_tangent_vec, surface_normal_vec, surface_center_coords);
-   
-            
-            // // Fallback to prox library get_closest_object
-            // if (!found_obstacle) {
-            //     found_obstacle = g2.proximity.get_closest_object(yaw_to_obs_deg, dist_to_obs_m);
-            // } else {
-            //     yaw_to_obs_deg = (targ_heading_rad - ahrs.get_yaw())*RAD_TO_DEG;
-            // }
 
-            // !!!!!!!!!!!!!!!!!!! TODO FIX FOR AHRS.GET_YAW() MISHAP !!!!!!!!!!!!!!!!!
-            // hgjfkghjdfkghdfk
-            // if (millis()-_time_since_last_yaw > 1) {
-            //     _yaw_buf.addYaw(ahrs.get_yaw()); // add the current yaw to the buffer
-            //     _time_since_last_yaw = millis();
-            // }
-            // float delayed_yaw = 0.0f; 
-            // if (_yaw_buf.getDelayedYaw(_mtn_cmp_ms.get(), delayed_yaw)) {
-            //     yaw_to_obs_deg += (delayed_yaw - ahrs.get_yaw()); // get the adjusted offset
-            // }
-            // !!!!!!!!!!!!!!!!!!! TODO FIX FOR AHRS.GET_YAW() MISHAP !!!!!!!!!!!!!!!!!
-
-            float yaw_to_obs_deg = wrap_180((surface_heading_rad-ahrs.get_yaw())*RAD_TO_DEG);
+            float heading_to_obs_deg = wrap_180(surface_heading_rad*RAD_TO_DEG);
             float dist_to_obs_m = surface_distance_m;
             
             if (found_obstacle) { // only perform obstacle stuff when obstacles are in, otherwise do regular loiter
@@ -431,36 +408,12 @@ void ModeLoiterAssisted::run()
                     GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"No pos estimate!");
                     return; // TODO: What do we even do here? Switch to stabilize?
                 }
-                // TODO Reevaluate if this is necessary ===================================
-                // propogate vehicle movements to yaw estimate
-                float delta_yaw = ahrs.get_yaw()*RAD_TO_DEG - _last_yaw_deg;
-                float filt_yaw_cmd_deg = _last_yaw_cmd_deg - delta_yaw; // subtract change in yaw from vehicle motion
 
-                // TODO Reevaluate if this is necessary ===================================
-                // propogate vehicle movements to dist estimate
-                float heading_obs_rad = ahrs.get_yaw() + filt_yaw_cmd_deg*DEG_TO_RAD;
-                float cos_yaw_obs = cosf(heading_obs_rad);
-                float sin_yaw_obs = sinf(heading_obs_rad);
-                Vector2f delta_pos = _current_vehicle_position.xy() - _last_vehicle_pos;
-                float delta_dist = delta_pos.dot(Vector2f(cos_yaw_obs,sin_yaw_obs));
-                float filt_dist_to_obs_m = _last_dist_to_obs_m - delta_dist; // subtract change in motion from vehicle
-                // ::fprintf(stderr,"yaw: %f\tdyaw: %f\tdist: %f\t ddsit: %f\n",filt_yaw_cmd_deg,delta_yaw,filt_dist_to_obs_m,delta_dist);
-                
-                // TODO Reevaluate if this is necessary ===================================
-                // new data in, compute absolute position of obstacle
-                if (!is_equal(yaw_to_obs_deg,_last_yaw_to_obs_deg) || !is_equal(dist_to_obs_m,_last_dist_to_obs_m)){ // when new lidar data comes in
-                    _last_yaw_to_obs_deg = yaw_to_obs_deg;
+                if (!is_equal(heading_to_obs_deg,_last_heading_to_obs_deg) || !is_equal(dist_to_obs_m,_last_dist_to_obs_m)){ // when new lidar data comes in
+                    _last_heading_to_obs_deg = heading_to_obs_deg;
                     _last_dist_to_obs_m = dist_to_obs_m;
 
                     // // Start tracking global position of nearest point
-                    // float pitch_rad = ahrs.get_pitch(); // replace with pitch of sensor
-                    // float yaw_rad = yaw_to_obs_deg*DEG_TO_RAD;
-
-                    // // Calculate x, y, z using spherical to Cartesian conversion
-                    // float x = dist_to_obs_m * cosf(pitch_rad) * cosf(yaw_rad);
-                    // float y = dist_to_obs_m * cosf(pitch_rad) * sinf(yaw_rad);
-                    // float z = dist_to_obs_m * sinf(pitch_rad);
-                    // const Vector3f dock_target_vec{x,y,z};
                     float x = surface_center_coords.x;
                     float y = surface_center_coords.y;
                     float z = _current_vehicle_position.z;
@@ -476,41 +429,29 @@ void ModeLoiterAssisted::run()
                             _ready_to_dock = true;
                         }
                     }
-                    // ::fprintf(stderr, "xpos: %f, ypos: %f, zpos: %f\n", dock_target_pos.x, dock_target_pos.y, dock_target_pos.z);
-                    // ::fprintf(stderr, "xvar: %f, yvar: %f, zvar: %f\n", dock_target_var.x, dock_target_var.y, dock_target_var.z);
-
-                    filt_yaw_cmd_deg = _yaw_filter.apply(yaw_to_obs_deg);
-                    filt_dist_to_obs_m = _dist_filter.apply(dist_to_obs_m);
-                    
-                    heading_obs_rad = ahrs.get_yaw() + filt_yaw_cmd_deg*DEG_TO_RAD;
-                    cos_yaw_obs = cosf(heading_obs_rad);
-                    sin_yaw_obs = sinf(heading_obs_rad);
                 }
+                float filt_heading_cmd_deg = _yaw_filter.apply(heading_to_obs_deg);
+                float filt_dist_to_obs_m = _dist_filter.apply(dist_to_obs_m);
+                
+                float cos_heading_obs = cosf(filt_heading_cmd_deg);
+                float sin_heading_obs = sinf(filt_heading_cmd_deg);
 
                 Vector2f vec_to_target_2d_m = _filt_dock_target_pos.xy() - _current_vehicle_position.xy();
 
                 // Update target information for attach()
                 if (!_lock_commands){
-                    // _xy_pos = _filt_dock_target_pos.todouble().xy() * 100.0; // xy pos in NEU cm
                     _xy_vel = vec_to_target_2d_m.normalized()*_dock_speed_mps.get()*100.0f;
-                    // _z_pos = -_filt_dock_target_pos.z*100.0f;
                     _bearing_cd = get_bearing_cd(_current_vehicle_position.xy(), _filt_dock_target_pos.xy());
                 }
                 Vector2f reverse_vel = _xy_vel.normalized()*-_undock_speed_mps.get()*100.0f; // convert m/s to cm/s
                 float reverse_vel_z = ((0.0<_z_vel)-(_z_vel<0.0))*-_undock_speed_mps.get()*100.0f;
 
-                
-
                 // Docking state controller
                 switch (_docking_state){
                     case DockingState::ATTACH_MANEUVER: 
-                        // pos_control->input_pos_vel_accel_xy(_xy_pos, _xy_vel, _xy_accel);
-                        // pos_control->input_pos_vel_accel_z(_z_pos, _z_pos, _z_accel);
                         pos_control->input_vel_accel_xy(_xy_vel, _xy_accel);
                         pos_control->input_vel_accel_z(_z_vel, _z_accel);
-                        filt_yaw_cmd_deg = wrap_180(_bearing_cd/100.0f - ahrs.get_yaw()*RAD_TO_DEG);
-                        // ::fprintf(stderr,"sending pos x: %f, y: %f, z: %f\n", _xy_pos.x, _xy_pos.y, _z_pos);
-                        // ::fprintf(stderr,"sending vel x: %f, y: %f, z: %f\n", _xy_vel.x, _xy_vel.y, _z_vel);
+                        filt_heading_cmd_deg = wrap_180(_bearing_cd/100.0f);
                         if(ModeLoiterAssisted::attached_state) { //signal from sensor
                             attached();
                         }
@@ -548,14 +489,14 @@ void ModeLoiterAssisted::run()
 
                         float distance_err_cm = filt_dist_to_obs_m * 100.0 - _distance_target_cm;
                         Vector2p dist_correction(
-                            distance_err_cm*cos_yaw_obs,
-                            distance_err_cm*sin_yaw_obs
+                            distance_err_cm*cos_heading_obs,
+                            distance_err_cm*sin_heading_obs
                         );
                         Vector2p target_pos = pos_control->get_pos_target_cm().xy();
                         target_pos += dist_correction;
                         Vector2f target_vel(
-                            -vel_rt*sin_yaw_obs,
-                            vel_rt*cos_yaw_obs
+                            -vel_rt*sin_heading_obs,
+                            vel_rt*cos_heading_obs
                         );
                         pos_control->input_pos_vel_accel_xy(target_pos, target_vel, Vector2f(0,0)); // input pos and vel targets
                         _last_vehicle_pos = _current_vehicle_position.xy();
@@ -564,22 +505,16 @@ void ModeLoiterAssisted::run()
                 }
 
                 // YAW CONTROLLER //
-                /*Update the heading controller at a low rate (this is because the auto yaw controller uses
-                a dt parameter that goes to zero if you update too fast). We also do it if we've reached a target early.*/
-                bool dz_exceeded = abs(filt_yaw_cmd_deg - _last_yaw_cmd_deg) > _yaw_dz;
-                dz_exceeded |= (_docking_state==DockingState::ATTACH_MANEUVER);
-                if ((millis() - _last_yaw_update_ms > 200) && dz_exceeded) { // || auto_yaw.reached_fixed_yaw_target()
-                    int8_t direction = (filt_yaw_cmd_deg >= 0 ? 1.0 : -1.0);
-                    auto_yaw.set_fixed_yaw(abs(filt_yaw_cmd_deg), 0.0f, direction, true);
-                    _last_yaw_cmd_deg = filt_yaw_cmd_deg;
-                    _last_yaw_deg = ahrs.get_yaw()*RAD_TO_DEG;
-                    _last_yaw_update_ms = millis();
-                }
+                AC_AttitudeControl::HeadingCommand heading_cmd;
+                heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
+                heading_cmd.yaw_angle_cd = filt_heading_cmd_deg*100.0f;
+                heading_cmd.yaw_rate_cds = 0.0;
                 // END YAW CONTROLLER //
 
                 pos_control->update_xy_controller(); // run pos controller
                 // AUGMENT CONTROL //
-                attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), auto_yaw.get_heading());
+                // attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), auto_yaw.get_heading());
+                attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
                 // get avoidance adjusted climb rate
                 #if AP_RANGEFINDER_ENABLED
                 // update the vertical offset based on the surface measurement
