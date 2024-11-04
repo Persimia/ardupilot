@@ -391,10 +391,10 @@ void ModeLoiterAssisted::run()
 
             bool found_obstacle = g2.proximity.curvefit->get_target(surface_heading_rad, surface_distance_m, surface_tangent_vec, surface_normal_vec, surface_center_coords);
 
-            float heading_to_obs_deg = wrap_180(surface_heading_rad*RAD_TO_DEG);
-            float dist_to_obs_m = surface_distance_m;
-            
             if (found_obstacle) { // only perform obstacle stuff when obstacles are in, otherwise do regular loiter
+                float heading_to_obs_deg = wrap_180(surface_heading_rad*RAD_TO_DEG);
+                float dist_to_obs_m = surface_distance_m;
+
                 if(!_target_acquired){// Reacquired target so reset yaw. TODO manage this state better
                     _distance_target_cm = dist_to_obs_m * 100.0;
                     _target_acquired = true; //TODO control this more clearly
@@ -409,9 +409,9 @@ void ModeLoiterAssisted::run()
                     return; // TODO: What do we even do here? Switch to stabilize?
                 }
 
-                if (!is_equal(heading_to_obs_deg,_last_heading_to_obs_deg) || !is_equal(dist_to_obs_m,_last_dist_to_obs_m)){ // when new lidar data comes in
-                    _last_heading_to_obs_deg = heading_to_obs_deg;
-                    _last_dist_to_obs_m = dist_to_obs_m;
+                if (!is_equal(surface_center_coords.x,_last_surface_center_coords_x) || !is_equal(surface_center_coords.y,_last_surface_center_coords_y)){ // when new lidar data comes in
+                    _last_surface_center_coords_x = surface_center_coords.x;
+                    _last_surface_center_coords_y = surface_center_coords.y;
 
                     // // Start tracking global position of nearest point
                     float x = surface_center_coords.x;
@@ -420,7 +420,7 @@ void ModeLoiterAssisted::run()
                     const Vector3f dock_target_vec{x,y,z};
 
                     Vector3f dock_target_pos = ahrs.body_to_earth(dock_target_vec) + _current_vehicle_position; // this is the NED target pos relative to EKF origin
-                    _filt_dock_target_pos = _dock_target_pos_filter.apply(dock_target_pos);
+                    _filt_dock_target_pos = _dock_target_pos_filter.apply(dock_target_pos); // this is currently filtering something that is already filtered by curvefit (TODO Fix)
                     
                     _ready_to_dock = false;
                     Vector3f dock_target_var;
@@ -430,6 +430,7 @@ void ModeLoiterAssisted::run()
                         }
                     }
                 }
+
                 float filt_heading_cmd_deg = _yaw_filter.apply(heading_to_obs_deg);
                 float filt_dist_to_obs_m = _dist_filter.apply(dist_to_obs_m);
                 
@@ -499,9 +500,7 @@ void ModeLoiterAssisted::run()
                             vel_rt*cos_heading_obs
                         );
                         pos_control->input_pos_vel_accel_xy(target_pos, target_vel, Vector2f(0,0)); // input pos and vel targets
-                        _last_vehicle_pos = _current_vehicle_position.xy();
                         break;
-
                 }
 
                 // YAW CONTROLLER //
