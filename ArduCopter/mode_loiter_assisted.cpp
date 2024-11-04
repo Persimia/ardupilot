@@ -446,6 +446,19 @@ void ModeLoiterAssisted::run()
                 Vector2f reverse_vel = _xy_vel.normalized()*-_undock_speed_mps.get()*100.0f; // convert m/s to cm/s
                 float reverse_vel_z = ((0.0<_z_vel)-(_z_vel<0.0))*-_undock_speed_mps.get()*100.0f;
 
+                if (millis()-_last_log_time > 100) {
+                    AP::logger().Write("LASS","TimeUS,targX,targY,velX,velY,Dkg","smmnn-","F0000-","QffffB",
+                    AP_HAL::micros64(),
+                    _filt_dock_target_pos.x,
+                    _current_vehicle_position.y,
+                    _xy_vel.x,
+                    _xy_vel.y,
+                    uint8_t(_lock_commands)
+                    );
+                    _last_log_time = millis();
+                }
+                
+
                 // Docking state controller
                 switch (_docking_state){
                     case DockingState::ATTACH_MANEUVER: 
