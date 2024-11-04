@@ -2,6 +2,7 @@
 #include <AP_Logger/AP_Logger.h>
 #include <AP_Proximity/AP_Proximity.h>
 #include <algorithm>
+#include <GCS_MAVLink/GCS.h>
 
 
 #if AP_PROXIMITY_CURVEFIT_ENABLED
@@ -233,7 +234,7 @@ bool AP_Proximity_CurveFit::solve_line(AP_Proximity_CurveFit::Coefficients c, Ve
 void AP_Proximity_CurveFit::add_point(float angle_deg, float distance)
 {
     angle_deg = wrap_180(angle_deg);
-    uint8_t dir = (_last_angle < angle_deg) ? 1 : (_last_angle > angle_deg ? -1 : 0);
+    // uint8_t dir = (_last_angle < angle_deg) ? 1 : (_last_angle > angle_deg ? -1 : 0);
 
     // check if angle is within range
     if(angle_deg > _angle_min_deg.get() && angle_deg < _angle_max_deg.get()){
@@ -260,26 +261,25 @@ void AP_Proximity_CurveFit::add_point(float angle_deg, float distance)
     //this indicates that a new scan is availible and moves the _write_start in preparation for the next scan
     else if(_last_angle > _angle_min_deg.get() && _last_angle < _angle_max_deg.get()){
         reset();
-        _reset_flag = true;
+        // _reset_flag = true;
     }
-    if (dir != _last_dir) { // if direction changes, we want to reset if we haven't already
-        if (!_reset_flag) {
-            if (!_first_time_range_error) { // ignore the first one because we can't know first dir
-                gcs().send_text(MAV_SEVERITY_CRITICAL, "CFIT ANG RANGE TOO BIG!"); 
-                // maybe we don't need to alert anyone since we're doing the reset here anyway?
-                reset();
-            }
-            else {
-                _first_time_range_error = false;
-            }
-        } else {
-            _reset_flag = false;
-        }
-        
-    }
+    // if (dir != _last_dir) { // if direction changes, we want to reset if we haven't already
+    //     if (!_reset_flag) {
+    //         if (!_first_time_range_error) { // ignore the first one because we can't know first dir
+    //             gcs().send_text(MAV_SEVERITY_CRITICAL, "CFIT ANG RANGE TOO BIG!"); 
+    //             // maybe we don't need to alert anyone since we're doing the reset here anyway?
+    //             reset();
+    //         }
+    //         else {
+    //             _first_time_range_error = false;
+    //         }
+    //     } else {
+    //         _reset_flag = false;
+    //     }
+    // }
 
     _last_angle = angle_deg;
-    _last_dir = dir;
+    // _last_dir = dir;
     return;
 }
 
