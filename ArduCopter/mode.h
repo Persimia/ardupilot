@@ -1356,27 +1356,26 @@ private:
     DockingState _docking_state = DockingState::NOT_DOCKING;
 
     // Define parameters
-    AP_Float _pitch_to_fw_vel_gain;
-    AP_Float _roll_to_rt_vel_gain;
+    AP_Float _vel_max_cms;
     AP_Float _min_obs_dist_cm;
     AP_Float _yaw_hz;
     AP_Float _pos_filt_hz;
     AP_Float _dist_filt_hz;
     AP_Int32 _wv_window_size;
     AP_Float _wv_thresh;
-    AP_Float _dock_speed_mps;
-    AP_Float _undock_speed_mps;
+    AP_Float _dock_speed_cms;
+    AP_Float _undock_speed_cms;
 
     uint32_t _last_yaw_update_ms;
 
-    float _last_surface_center_coords_x;
-    float _last_surface_center_coords_y;
+    float _last_cfit_center_xy_m_x;
+    float _last_cfit_center_xy_m_y;
 
     Vector2f _last_vehicle_pos;
 
     LowPassFilterFloat _yaw_filter;
     LowPassFilterFloat _dist_filter;
-    LowPassFilterVector3f _dock_target_pos_filter;
+    LowPassFilterVector3f _dock_pos_filter;
 
     class WindowVar {
         public:
@@ -1399,7 +1398,7 @@ private:
     bool _ready_to_dock{false};
 
     Vector2p _xy_pos; // xy pos in NEU cm
-    Vector2f _xy_vel; // xy vel in NEU cm
+    Vector2f _xy_vel_cms; // xy vel in NEU cm
     const Vector2f _xy_accel{0,0};
     float _z_pos;
     float _z_vel{0};
@@ -1411,8 +1410,9 @@ private:
     bool _lock_commands{false}; //Whether or not to lock the estimates for position
 
     Vector3f _current_vehicle_position;
-    Vector3f _filt_dock_target_pos;
+    Vector3f _filt_dock_xyz_NEU_m;
 
+    uint32_t _last_millis;
     class YawBuffer {
         public:
             YawBuffer() : YawBuffer(100) {}

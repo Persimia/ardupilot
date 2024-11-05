@@ -10,92 +10,84 @@
  * Init and run calls for loiter flight mode
  */
 
-#define PITCH_TO_FW_VEL_GAIN_DEFAULT         0.1
-#define ROLL_TO_RT_VEL_GAIN_DEFAULT          0.1
+#define VEL_MAX_DEFAULT                      100
 #define MIN_OBS_DIST_CM_DEFAULT              100
 #define YAW_HZ_DEFAULT                       100.0
 #define DIST_HZ_DEFAULT                      100.0
 #define POS_HZ_DEFAULT                       100.0
 #define WV_WIND_DEFAULT                      5
 #define WV_THRESH_DEFAULT                    0.1 
-#define DOCK_SPEED_MPS_DEFAULT               0.1
-#define UNDOCK_SPEED_MPS_DEFAULT             0.5
+#define DOCK_SPEED_CMS_DEFAULT               100.0
+#define UNDOCK_SPEED_CMS_DEFAULT             500.0
 
 bool ModeLoiterAssisted::attached_state = false;  // Initialization
 
 const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
-    // @Param: P_2_FW_VEL
-    // @DisplayName: Pitch to perpendicular vel
-    // @Description: Gain from pitch angle to perpendicular velocity
+    // @Param: VEL_MAX
+    // @DisplayName: Max velocity commandable by sticks cm/s
+    // @Description: Max velocity commandable by sticks cm/s
     // @Range: 0 2
     // @User: Advanced
-    AP_GROUPINFO("P_2_FW_VEL", 1, ModeLoiterAssisted, _pitch_to_fw_vel_gain, PITCH_TO_FW_VEL_GAIN_DEFAULT),
-
-    // @Param: R_2_RT_VEL
-    // @DisplayName: Roll to lateral vel
-    // @Description: Gain from roll angle to lateral velocity
-    // @Range: 0 2
-    // @User: Advanced
-    AP_GROUPINFO("R_2_RT_VEL", 2, ModeLoiterAssisted, _roll_to_rt_vel_gain, ROLL_TO_RT_VEL_GAIN_DEFAULT),
+    AP_GROUPINFO("VEL_MAX", 1, ModeLoiterAssisted, _vel_max_cms, VEL_MAX_DEFAULT),
 
     // @Param: MIN_DIST
-    // @DisplayName: Minimum dist to obstacle
-    // @Description: Minimum distance that you can get to the obstacle
+    // @DisplayName: Minimum dist to obstacle cm
+    // @Description: Minimum distance that you can get to the obstacle cm
     // @Units: cm
     // @Range: 0 5000
     // @User: Advanced
-    AP_GROUPINFO("MIN_DIST", 3, ModeLoiterAssisted, _min_obs_dist_cm, MIN_OBS_DIST_CM_DEFAULT),
+    AP_GROUPINFO("MIN_DIST", 2, ModeLoiterAssisted, _min_obs_dist_cm, MIN_OBS_DIST_CM_DEFAULT),
 
     // @Param: YAW_HZ
     // @DisplayName: Yaw LPF alpha
     // @Description: This is the alpha for lpf on yaw [x*a + y*(a-1)]
     // @Range: 0 100
     // @User: Advanced
-    AP_GROUPINFO("YAW_HZ", 4, ModeLoiterAssisted, _yaw_hz, YAW_HZ_DEFAULT),
+    AP_GROUPINFO("YAW_HZ", 3, ModeLoiterAssisted, _yaw_hz, YAW_HZ_DEFAULT),
 
     // @Param: POS_HZ
     // @DisplayName: Pos LPF alpha
     // @Description: This is the alpha for lpf on dist [x*a + y*(a-1)]
     // @Range: 0 100
     // @User: Advanced
-    AP_GROUPINFO("POS_HZ", 5, ModeLoiterAssisted, _pos_filt_hz, POS_HZ_DEFAULT),
+    AP_GROUPINFO("POS_HZ", 4, ModeLoiterAssisted, _pos_filt_hz, POS_HZ_DEFAULT),
 
     // @Param: DIST_HZ
     // @DisplayName: Dist LPF alpha
     // @Description: This is the alpha for lpf on dist [x*a + y*(a-1)]
     // @Range: 0 100
     // @User: Advanced
-    AP_GROUPINFO("DIST_HZ", 6, ModeLoiterAssisted, _dist_filt_hz, DIST_HZ_DEFAULT),
+    AP_GROUPINFO("DIST_HZ", 5, ModeLoiterAssisted, _dist_filt_hz, DIST_HZ_DEFAULT),
 
     // @Param: WV_WIND
     // @DisplayName: Window Var window size
     // @Description: min samples for window var estimator to provide variance estimate
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("WV_WIND", 7, ModeLoiterAssisted, _wv_window_size, WV_WIND_DEFAULT),
+    AP_GROUPINFO("WV_WIND", 6, ModeLoiterAssisted, _wv_window_size, WV_WIND_DEFAULT),
 
     // @Param: WV_THRESH
     // @DisplayName: Window Var threshold for good docking
     // @Description: Variance threshold that has to be met to enable docking
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("WV_THRESH", 8, ModeLoiterAssisted, _wv_thresh, WV_THRESH_DEFAULT),
+    AP_GROUPINFO("WV_THRESH", 7, ModeLoiterAssisted, _wv_thresh, WV_THRESH_DEFAULT),
 
     // @Param: DOCK_SPD
-    // @DisplayName: Dock speed
-    // @Description: speed to impact the target at
+    // @DisplayName: Dock speed cm/s
+    // @Description: speed to impact the target at cm/s
     // @Unit: mps
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("DOCK_SPD", 9, ModeLoiterAssisted, _dock_speed_mps, DOCK_SPEED_MPS_DEFAULT),
+    AP_GROUPINFO("DOCK_SPD", 8, ModeLoiterAssisted, _dock_speed_cms, DOCK_SPEED_CMS_DEFAULT),
 
     // @Param: UNDOCK_SPD
-    // @DisplayName: UnDock speed
-    // @Description: speed to escape the target at
+    // @DisplayName: UnDock speed cm/s
+    // @Description: speed to escape the target at cm/s
     // @Unit: mps
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("UNDOCK_SPD", 10, ModeLoiterAssisted, _undock_speed_mps, UNDOCK_SPEED_MPS_DEFAULT),
+    AP_GROUPINFO("UNDOCK_SPD", 9, ModeLoiterAssisted, _undock_speed_cms, UNDOCK_SPEED_CMS_DEFAULT),
 
     AP_GROUPEND
 };
@@ -144,7 +136,7 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     _docking_state = DockingState::NOT_DOCKING;
     _yaw_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _yaw_hz.get());
     _dist_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dist_filt_hz.get());
-    _dock_target_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _pos_filt_hz.get()); // TODO: use custom dock hz param
+    _dock_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _pos_filt_hz.get()); // TODO: use custom dock hz param
     _dock_target_window_var = WindowVar(_wv_window_size.get()); // reinit with new min samples
     _yaw_buf = ModeLoiterAssisted::YawBuffer(); // reinit yaw buffer
     _time_since_last_yaw = millis();
@@ -278,8 +270,8 @@ void ModeLoiterAssisted::run()
     if (!is_equal(_dist_filter.get_cutoff_freq(), _dist_filt_hz.get())) {
         _dist_filter.set_cutoff_frequency(_dist_filt_hz.get());
     }
-    if (!is_equal(_dock_target_pos_filter.get_cutoff_freq(), _pos_filt_hz.get())) { // TODO update to dock_hz
-        _dock_target_pos_filter.set_cutoff_frequency(_pos_filt_hz.get());
+    if (!is_equal(_dock_pos_filter.get_cutoff_freq(), _pos_filt_hz.get())) { // TODO update to dock_hz
+        _dock_pos_filter.set_cutoff_frequency(_pos_filt_hz.get());
     }
     if (!is_equal(_dock_target_window_var.get_window_size(), _wv_window_size.get())) {
         _dock_target_window_var.set_new_window_size(_wv_window_size.get());
@@ -366,9 +358,9 @@ void ModeLoiterAssisted::run()
             float surface_distance_m;
             Vector2f surface_tangent_vec; 
             Vector2f surface_normal_vec;
-            Vector2f surface_center_coords;
+            Vector2f cfit_center_xy_m;
 
-            bool found_obstacle = g2.proximity.curvefit->get_target(surface_heading_rad, surface_distance_m, surface_tangent_vec, surface_normal_vec, surface_center_coords);
+            bool found_obstacle = g2.proximity.curvefit->get_target(surface_heading_rad, surface_distance_m, surface_tangent_vec, surface_normal_vec, cfit_center_xy_m);
 
             if (found_obstacle) { // only perform obstacle stuff when obstacles are in, otherwise do regular loiter
                 float heading_to_obs_deg = wrap_180(surface_heading_rad*RAD_TO_DEG);
@@ -379,7 +371,7 @@ void ModeLoiterAssisted::run()
                     _target_acquired = true; //TODO control this more clearly
                     _yaw_filter.reset();
                     _dist_filter.reset();
-                    _dock_target_pos_filter.reset();
+                    _dock_pos_filter.reset();
                     _dock_target_window_var.reset();
                 }
 
@@ -388,22 +380,22 @@ void ModeLoiterAssisted::run()
                     return; // TODO: What do we even do here? Switch to stabilize?
                 }
 
-                if (!is_equal(surface_center_coords.x,_last_surface_center_coords_x) || !is_equal(surface_center_coords.y,_last_surface_center_coords_y)){ // when new lidar data comes in
-                    _last_surface_center_coords_x = surface_center_coords.x;
-                    _last_surface_center_coords_y = surface_center_coords.y;
+                if (!is_equal(cfit_center_xy_m.x,_last_cfit_center_xy_m_x) || !is_equal(cfit_center_xy_m.y,_last_cfit_center_xy_m_y)){ // when new lidar data comes in
+                    _last_cfit_center_xy_m_x = cfit_center_xy_m.x;
+                    _last_cfit_center_xy_m_y = cfit_center_xy_m.y;
 
                     // // Start tracking global position of nearest point
-                    float x = surface_center_coords.x;
-                    float y = surface_center_coords.y;
+                    float x = cfit_center_xy_m.x;
+                    float y = cfit_center_xy_m.y;
                     float z = _current_vehicle_position.z;
-                    const Vector3f dock_target_pos{x,y,z};
+                    const Vector3f dock_pos{x,y,z};
 
-                    _filt_dock_target_pos = _dock_target_pos_filter.apply(dock_target_pos); // this is currently filtering something that is already filtered by curvefit (TODO Fix)
+                    _filt_dock_xyz_NEU_m = _dock_pos_filter.apply(dock_pos); // this is currently filtering something that is already filtered by curvefit (TODO Fix)
                     
                     _ready_to_dock = false;
                     Vector3f dock_target_var;
-                    if (_dock_target_window_var.apply(dock_target_pos, dock_target_var)) {
-                        if (dock_target_var.length() < _wv_thresh) {
+                    if (_dock_target_window_var.apply(dock_pos, dock_target_var)) {
+                        if (dock_target_var.length() < _wv_thresh.get()) {
                             _ready_to_dock = true;
                         }
                     }
@@ -411,27 +403,25 @@ void ModeLoiterAssisted::run()
 
                 float filt_heading_cmd_deg = _yaw_filter.apply(heading_to_obs_deg);
                 float filt_dist_to_obs_m = _dist_filter.apply(dist_to_obs_m);
-                
-                float cos_heading_obs = cosf(filt_heading_cmd_deg * DEG_TO_RAD);
-                float sin_heading_obs = sinf(filt_heading_cmd_deg * DEG_TO_RAD);
+    
 
-                Vector2f vec_to_target_2d_m = _filt_dock_target_pos.xy() - _current_vehicle_position.xy();
+                Vector2f vec_to_target_2d_m = _filt_dock_xyz_NEU_m.xy() - _current_vehicle_position.xy();
 
                 // Update target information for attach()
                 if (!_lock_commands){
-                    _xy_vel = vec_to_target_2d_m.normalized()*_dock_speed_mps.get()*100.0f;
-                    _bearing_cd = get_bearing_cd(_current_vehicle_position.xy(), _filt_dock_target_pos.xy());
+                    _xy_vel_cms = vec_to_target_2d_m.normalized()*_dock_speed_cms.get();
+                    _bearing_cd = get_bearing_cd(_current_vehicle_position.xy(), _filt_dock_xyz_NEU_m.xy());
                 }
-                Vector2f reverse_vel = _xy_vel.normalized()*-_undock_speed_mps.get()*100.0f; // convert m/s to cm/s
-                float reverse_vel_z = ((0.0<_z_vel)-(_z_vel<0.0))*-_undock_speed_mps.get()*100.0f;
+                Vector2f reverse_vel = _xy_vel_cms.normalized()*-_undock_speed_cms.get()*100.0f; // convert m/s to cm/s
+                float reverse_vel_z = ((0.0<_z_vel)-(_z_vel<0.0))*-_undock_speed_cms.get()*100.0f;
 
                 if (millis()-_last_log_time > 100) {
                     AP::logger().Write("LASS","TimeUS,targX,targY,velX,velY,Dkg","smmnn-","F0000-","QffffB",
                     AP_HAL::micros64(),
-                    _filt_dock_target_pos.x,
-                    _filt_dock_target_pos.y,
-                    _xy_vel.x,
-                    _xy_vel.y,
+                    _filt_dock_xyz_NEU_m.x,
+                    _filt_dock_xyz_NEU_m.y,
+                    _xy_vel_cms.x,
+                    _xy_vel_cms.y,
                     uint8_t(_lock_commands)
                     );
                     _last_log_time = millis();
@@ -441,8 +431,12 @@ void ModeLoiterAssisted::run()
                 // Docking state controller
                 switch (_docking_state){
                     case DockingState::ATTACH_MANEUVER: 
-                        pos_control->input_vel_accel_xy(_xy_vel, _xy_accel);
-                        pos_control->input_vel_accel_z(_z_vel, _z_accel);
+                        // pos_control->input_vel_accel_xy(_xy_vel_cms, _xy_accel);
+                        // pos_control->input_vel_accel_z(_z_vel, _z_accel);
+                        pos_control->set_vel_desired_xy_cms(_xy_vel_cms);
+                        // pos_control->set_accel_desired_xy_cmss(_xy_accel);
+                        pos_control->set_vel_desired_z_cms(_z_vel);
+                        fprintf(stderr, "vel_des (%.2f,  %.2f)\n", _xy_vel_cms.x, _xy_vel_cms.y);
                         filt_heading_cmd_deg = wrap_180(_bearing_cd/100.0f);
                         if(ModeLoiterAssisted::attached_state) { //signal from sensor
                             attached();
@@ -452,7 +446,7 @@ void ModeLoiterAssisted::run()
                     case DockingState::DETACH_MANEUVER:
                         pos_control->input_vel_accel_xy(reverse_vel, _xy_accel); // back up the way we came in
                         pos_control->input_vel_accel_z(reverse_vel_z, _z_accel);
-                        if (filt_dist_to_obs_m * 100.0 >= _min_obs_dist_cm) {
+                        if (filt_dist_to_obs_m * 100.0 >= _min_obs_dist_cm.get()) {
                             init(false); //reinitialize loiter controller
                         }
                         break;
@@ -471,34 +465,45 @@ void ModeLoiterAssisted::run()
                         FALLTHROUGH;
 
                     default:
-                        float vel_fw = -_pitch_to_fw_vel_gain * target_pitch; //Forward Velocity Command 
-                        float vel_rt =  _roll_to_rt_vel_gain * target_roll; //Right Velocity Command 
+                        // get estimated dt (rate at which this loop runs)
+                        uint32_t dt_meas = millis()-_last_millis;
+                        _last_millis = millis();
+                        if (dt_meas) {
 
-                        Vector2f des_vel_body{vel_fw, vel_rt};
-                        Vector2f des_vel_NEU = des_vel_body;
-                        des_vel_NEU.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
+                        };
+                        float dt = G_Dt;
+
+                        // xy pos control ==============
+                        Vector2f target_xy_body_vel_cms = get_pilot_desired_velocity_xy(_vel_max_cms.get());
+                        Vector2f target_xy_NEU_vel_cms = target_xy_body_vel_cms;
+                        target_xy_NEU_vel_cms.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
+
                         // integrate current pos to new target pos
-                        Vector2f target_pos = pos_control->get_pos_target_cm().xy() + des_vel_NEU*pos_control->get_dt();
+                        Vector2f target_xy_NEU_cm = pos_control->get_pos_target_cm().tofloat().xy() + target_xy_NEU_vel_cms*dt;
+                        
                         // check if target pos is too close to obstacle
-
-                        // if too close, adjust to nearest pos that fits min distance condition
-
-
-                        _distance_target_cm -= vel_fw*pos_control->get_dt();
-                        if (_distance_target_cm < _min_obs_dist_cm) 
-                        {
-                            _distance_target_cm = _min_obs_dist_cm;
+                        Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NEU_cm;
+                        float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
+                        if (target_to_dock_dist_cm < _min_obs_dist_cm.get()) {
+                            // if too close, adjust to nearest pos that fits min distance condition
+                            Vector2f min_dist_correction_vec_cm = target_to_dock_vec_cm.normalized()*abs(target_to_dock_dist_cm-_min_obs_dist_cm.get());
+                            target_xy_NEU_cm -= min_dist_correction_vec_cm;
                         }
 
-                        Vector2f distance_err_cm{filt_dist_to_obs_m * 100.0 - _distance_target_cm, 0};
-                        distance_err_cm.rotate(filt_heading_cmd_deg);
+                        // // z pos control ==========================================
+                        // float target_z_body_vel_cms = target_climb_rate;
+                        // float target_z_NEU_vel_cms = target_z_body_vel_cms;
+                        // float target_z_NEU_cm = pos_control->get_pos_target_cm().tofloat().z + target_z_NEU_vel_cms*dt;
 
-                        Vector2f target_vel{0,vel_rt};
-                        target_vel.rotate(filt_heading_cmd_deg);
-                        
-                        Vector2f target_pos = pos_control->get_pos_target_cm().xy() + distance_err_cm;
-                        pos_control->input_pos_vel_accel_xy(target_pos, target_vel, Vector2f(0,0)); // input pos and vel targets
-
+                        // // send pos control to pos_control
+                        // Vector3f target_xyz_NEU_cm{target_xy_NEU_cm.x, target_xy_NEU_cm.y, target_z_NEU_cm};
+                        // pos_control->input_pos_xyz(target_xyz_NEU_cm.todouble(),0,0); // input pos target TODO read about other args (offset and buffer)
+                        // Vector2f target_vel = {0,0};
+                        // fprintf(stderr, "Pos before: (%.1f, %.1f)",target_xy_NEU_cm.x,target_xy_NEU_cm.y);
+                        // Vector2p target_xy_NEU_cmd = target_xy_NEU_cm.todouble();
+                        // pos_control->input_pos_vel_accel_xy(target_xy_NEU_cmd, target_vel, Vector2f(0,0));
+                        // pos_control->set_pos_target_xy_cm(target_xy_NEU_cm.x, target_xy_NEU_cm.y);
+                        pos_control->set_pos_vel_accel_xy(target_xy_NEU_cm.todouble(), Vector2f(0,0), Vector2f(0,0));
                         break;
                 }
 
