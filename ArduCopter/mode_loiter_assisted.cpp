@@ -10,21 +10,16 @@
  * Init and run calls for loiter flight mode
  */
 
-#define PITCH_TO_FW_VEL_GAIN_DEFAULT         0.2
-#define ROLL_TO_RT_VEL_GAIN_DEFAULT          0.2
-#define MIN_OBS_DIST_CM_DEFAULT              200
-#define YAW_HZ_DEFAULT                       400.0
-#define DIST_HZ_DEFAULT                      400.0
-#define POS_HZ_DEFAULT                       400.0
-#define YAW_DEADZONE_DEFAULT                 10.0
+#define PITCH_TO_FW_VEL_GAIN_DEFAULT         0.1
+#define ROLL_TO_RT_VEL_GAIN_DEFAULT          0.1
+#define MIN_OBS_DIST_CM_DEFAULT              100
+#define YAW_HZ_DEFAULT                       100.0
+#define DIST_HZ_DEFAULT                      100.0
+#define POS_HZ_DEFAULT                       100.0
 #define WV_WIND_DEFAULT                      5
 #define WV_THRESH_DEFAULT                    0.1 
-#define DOCK_SPEED_MPS_DEFAULT               0.2
-#define UNDOCK_SPEED_MPS_DEFAULT             1.0
-#define MTN_CMP_MS_DEFAULT                   50
-
-
-#define DOCK_TARGET_DIST_CM                  0.0
+#define DOCK_SPEED_MPS_DEFAULT               0.1
+#define UNDOCK_SPEED_MPS_DEFAULT             0.5
 
 bool ModeLoiterAssisted::attached_state = false;  // Initialization
 
@@ -58,41 +53,33 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("YAW_HZ", 4, ModeLoiterAssisted, _yaw_hz, YAW_HZ_DEFAULT),
 
-    // @Param: YAW_DZ
-    // @DisplayName: Yaw controller deadzone
-    // @Description: Deadzone in degrees where the yaw controller won't update
-    // @Units: deg
-    // @Range: 0 180
-    // @User: Advanced
-    AP_GROUPINFO("YAW_DZ", 5, ModeLoiterAssisted, _yaw_dz, YAW_DEADZONE_DEFAULT),
-
     // @Param: POS_HZ
     // @DisplayName: Pos LPF alpha
     // @Description: This is the alpha for lpf on dist [x*a + y*(a-1)]
     // @Range: 0 100
     // @User: Advanced
-    AP_GROUPINFO("POS_HZ", 6, ModeLoiterAssisted, _pos_filt_hz, POS_HZ_DEFAULT),
+    AP_GROUPINFO("POS_HZ", 5, ModeLoiterAssisted, _pos_filt_hz, POS_HZ_DEFAULT),
 
     // @Param: DIST_HZ
     // @DisplayName: Dist LPF alpha
     // @Description: This is the alpha for lpf on dist [x*a + y*(a-1)]
     // @Range: 0 100
     // @User: Advanced
-    AP_GROUPINFO("DIST_HZ", 7, ModeLoiterAssisted, _dist_filt_hz, DIST_HZ_DEFAULT),
+    AP_GROUPINFO("DIST_HZ", 6, ModeLoiterAssisted, _dist_filt_hz, DIST_HZ_DEFAULT),
 
     // @Param: WV_WIND
     // @DisplayName: Window Var window size
     // @Description: min samples for window var estimator to provide variance estimate
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("WV_WIND", 8, ModeLoiterAssisted, _wv_window_size, WV_WIND_DEFAULT),
+    AP_GROUPINFO("WV_WIND", 7, ModeLoiterAssisted, _wv_window_size, WV_WIND_DEFAULT),
 
     // @Param: WV_THRESH
     // @DisplayName: Window Var threshold for good docking
     // @Description: Variance threshold that has to be met to enable docking
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("WV_THRESH", 9, ModeLoiterAssisted, _wv_thresh, WV_THRESH_DEFAULT),
+    AP_GROUPINFO("WV_THRESH", 8, ModeLoiterAssisted, _wv_thresh, WV_THRESH_DEFAULT),
 
     // @Param: DOCK_SPD
     // @DisplayName: Dock speed
@@ -100,7 +87,7 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Unit: mps
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("DOCK_SPD", 10, ModeLoiterAssisted, _dock_speed_mps, DOCK_SPEED_MPS_DEFAULT),
+    AP_GROUPINFO("DOCK_SPD", 9, ModeLoiterAssisted, _dock_speed_mps, DOCK_SPEED_MPS_DEFAULT),
 
     // @Param: UNDOCK_SPD
     // @DisplayName: UnDock speed
@@ -108,15 +95,7 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Unit: mps
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("UNDOCK_SPD", 11, ModeLoiterAssisted, _undock_speed_mps, UNDOCK_SPEED_MPS_DEFAULT),
-
-    // @Param: MTN_CMP_MS
-    // @DisplayName: Motion compensation delay
-    // @Description: ms delay between when lidar arrives and when heading is computed
-    // @Unit: ms
-    // @Range: 0 100
-    // @User: Advanced
-    AP_GROUPINFO("MTN_CMP_MS", 12, ModeLoiterAssisted, _mtn_cmp_ms, MTN_CMP_MS_DEFAULT),
+    AP_GROUPINFO("UNDOCK_SPD", 10, ModeLoiterAssisted, _undock_speed_mps, UNDOCK_SPEED_MPS_DEFAULT),
 
     AP_GROUPEND
 };

@@ -1360,14 +1360,12 @@ private:
     AP_Float _roll_to_rt_vel_gain;
     AP_Float _min_obs_dist_cm;
     AP_Float _yaw_hz;
-    AP_Float _yaw_dz;
     AP_Float _pos_filt_hz;
     AP_Float _dist_filt_hz;
     AP_Int32 _wv_window_size;
     AP_Float _wv_thresh;
     AP_Float _dock_speed_mps;
     AP_Float _undock_speed_mps;
-    AP_Int32 _mtn_cmp_ms;
 
     uint32_t _last_yaw_update_ms;
 
