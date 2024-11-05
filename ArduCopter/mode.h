@@ -1406,6 +1406,7 @@ private:
     const float _z_accel{0};
     float _filt_yaw_cmd_deg;
     float _bearing_cd;
+    uint32_t _last_log_time;
 
     bool _lock_commands{false}; //Whether or not to lock the estimates for position
 
