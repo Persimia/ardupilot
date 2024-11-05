@@ -429,7 +429,7 @@ void ModeLoiterAssisted::run()
                     AP::logger().Write("LASS","TimeUS,targX,targY,velX,velY,Dkg","smmnn-","F0000-","QffffB",
                     AP_HAL::micros64(),
                     _filt_dock_target_pos.x,
-                    _current_vehicle_position.y,
+                    _filt_dock_target_pos.y,
                     _xy_vel.x,
                     _xy_vel.y,
                     uint8_t(_lock_commands)
@@ -473,24 +473,32 @@ void ModeLoiterAssisted::run()
                     default:
                         float vel_fw = -_pitch_to_fw_vel_gain * target_pitch; //Forward Velocity Command 
                         float vel_rt =  _roll_to_rt_vel_gain * target_roll; //Right Velocity Command 
+
+                        Vector2f des_vel_body{vel_fw, vel_rt};
+                        Vector2f des_vel_NEU = des_vel_body;
+                        des_vel_NEU.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
+                        // integrate current pos to new target pos
+                        Vector2f target_pos = pos_control->get_pos_target_cm().xy() + des_vel_NEU*pos_control->get_dt();
+                        // check if target pos is too close to obstacle
+
+                        // if too close, adjust to nearest pos that fits min distance condition
+
+
                         _distance_target_cm -= vel_fw*pos_control->get_dt();
                         if (_distance_target_cm < _min_obs_dist_cm) 
                         {
                             _distance_target_cm = _min_obs_dist_cm;
                         }
 
-                        float distance_err_cm = filt_dist_to_obs_m * 100.0 - _distance_target_cm;
-                        Vector2p dist_correction(
-                            distance_err_cm*cos_heading_obs,
-                            distance_err_cm*sin_heading_obs
-                        );
-                        Vector2p target_pos = pos_control->get_pos_target_cm().xy();
-                        target_pos += dist_correction;
-                        Vector2f target_vel(
-                            -vel_rt*sin_heading_obs,
-                            vel_rt*cos_heading_obs
-                        );
+                        Vector2f distance_err_cm{filt_dist_to_obs_m * 100.0 - _distance_target_cm, 0};
+                        distance_err_cm.rotate(filt_heading_cmd_deg);
+
+                        Vector2f target_vel{0,vel_rt};
+                        target_vel.rotate(filt_heading_cmd_deg);
+                        
+                        Vector2f target_pos = pos_control->get_pos_target_cm().xy() + distance_err_cm;
                         pos_control->input_pos_vel_accel_xy(target_pos, target_vel, Vector2f(0,0)); // input pos and vel targets
+
                         break;
                 }
 
