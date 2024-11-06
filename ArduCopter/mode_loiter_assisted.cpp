@@ -431,12 +431,11 @@ void ModeLoiterAssisted::run()
                 // Docking state controller
                 switch (_docking_state){
                     case DockingState::ATTACH_MANEUVER: 
-                        // pos_control->input_vel_accel_xy(_xy_vel_cms, _xy_accel);
-                        // pos_control->input_vel_accel_z(_z_vel, _z_accel);
-                        pos_control->set_vel_desired_xy_cms(_xy_vel_cms);
-                        // pos_control->set_accel_desired_xy_cmss(_xy_accel);
-                        pos_control->set_vel_desired_z_cms(_z_vel);
-                        fprintf(stderr, "vel_des (%.2f,  %.2f)\n", _xy_vel_cms.x, _xy_vel_cms.y);
+                        pos_control->input_vel_accel_xy(_xy_vel_cms, _xy_accel);
+                        pos_control->input_vel_accel_z(_z_vel, _z_accel);
+                        // pos_control->set_vel_desired_xy_cms(_xy_vel_cms);
+                        // // pos_control->set_accel_desired_xy_cmss(_xy_accel);
+                        // pos_control->set_vel_desired_z_cms(_z_vel);
                         filt_heading_cmd_deg = wrap_180(_bearing_cd/100.0f);
                         if(ModeLoiterAssisted::attached_state) { //signal from sensor
                             attached();
@@ -472,6 +471,7 @@ void ModeLoiterAssisted::run()
 
                         };
                         float dt = G_Dt;
+                        // float dt = 1;
 
                         // xy pos control ==============
                         Vector2f target_xy_body_vel_cms = get_pilot_desired_velocity_xy(_vel_max_cms.get());
@@ -498,12 +498,14 @@ void ModeLoiterAssisted::run()
                         // // send pos control to pos_control
                         // Vector3f target_xyz_NEU_cm{target_xy_NEU_cm.x, target_xy_NEU_cm.y, target_z_NEU_cm};
                         // pos_control->input_pos_xyz(target_xyz_NEU_cm.todouble(),0,0); // input pos target TODO read about other args (offset and buffer)
+                        
                         // Vector2f target_vel = {0,0};
-                        // fprintf(stderr, "Pos before: (%.1f, %.1f)",target_xy_NEU_cm.x,target_xy_NEU_cm.y);
-                        // Vector2p target_xy_NEU_cmd = target_xy_NEU_cm.todouble();
-                        // pos_control->input_pos_vel_accel_xy(target_xy_NEU_cmd, target_vel, Vector2f(0,0));
-                        // pos_control->set_pos_target_xy_cm(target_xy_NEU_cm.x, target_xy_NEU_cm.y);
-                        pos_control->set_pos_vel_accel_xy(target_xy_NEU_cm.todouble(), Vector2f(0,0), Vector2f(0,0));
+                        // // fprintf(stderr, "Pos before: (%.1f, %.1f)",target_xy_NEU_cm.x,target_xy_NEU_cm.y);
+                        // Vector2p target_xy_NEU_cm_double = target_xy_NEU_cm.todouble();
+                        // pos_control->input_pos_vel_accel_xy(target_xy_NEU_cm_double, target_vel, Vector2f(0,0));
+                        
+                        pos_control->set_pos_target_xy_cm(target_xy_NEU_cm.x, target_xy_NEU_cm.y);
+                        // pos_control->set_pos_vel_accel_xy(target_xy_NEU_cm.todouble(), Vector2f(0,0), Vector2f(0,0));
                         break;
                 }
 
