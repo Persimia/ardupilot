@@ -34,7 +34,7 @@ static const uint32_t PROXIMITY_SF45B_TIMEOUT_MS = 2000; // This was originally 
 static const uint32_t PROXIMITY_SF45B_REINIT_INTERVAL_MS = 5000;    // re-initialise sensor after this many milliseconds
 static const float PROXIMITY_SF45B_COMBINE_READINGS_DEG = 5.0f;     // combine readings from within this many degrees to improve efficiency
 static const uint32_t PROXIMITY_SF45B_STREAM_DISTANCE_DATA_CM = 5;
-static const uint8_t PROXIMITY_SF45B_DESIRED_UPDATE_RATE = 6;       // 1:48hz, 2:55hz, 3:64hz, 4:77hz, 5:97hz, 6:129hz, 7:194hz, 8:388hz
+static const uint8_t PROXIMITY_SF45B_DESIRED_UPDATE_RATE = 4;       // 1:50hz, 2:100hz, 3:200hz, 4:400hz, 5:500hz, 6:625hz
 static const uint32_t PROXIMITY_SF45B_DESIRED_FIELDS = ((uint32_t)1 << 0 | (uint32_t)1 << 8);   // first return (unfiltered), yaw angle
 static const uint16_t PROXIMITY_SF45B_DESIRED_FIELD_COUNT = 2;      // DISTANCE_DATA_CM message should contain two fields
 
@@ -142,13 +142,14 @@ void AP_Proximity_LightWareSF45B::process_message()
         }
         _last_distance_received_ms = AP_HAL::millis();
         const float distance_m = _distance_filt.apply((int16_t)UINT16_VALUE(_msg.payload[1], _msg.payload[0])) * 0.01f;
+        const float distance_m_unfilt = (int16_t)UINT16_VALUE(_msg.payload[1], _msg.payload[0]) * 0.01f;
         const float angle_deg = correct_angle_for_orientation((int16_t)UINT16_VALUE(_msg.payload[3], _msg.payload[2]) * 0.01f);
 
 #if AP_PROXIMITY_CURVEFIT_ENABLED
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // curve fit
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            frontend.curvefit->add_point(angle_deg, distance_m); //add data
+            frontend.curvefit->add_point(angle_deg, distance_m_unfilt); //add data
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #endif
 
@@ -157,7 +158,7 @@ void AP_Proximity_LightWareSF45B::process_message()
         const AP_Proximity_Boundary_3D::Face face = frontend.boundary.get_face(angle_deg);
         if (face != _face) {
             if (_face_distance_valid) {
-                frontend.boundary.set_face_attributes(_face, _face_yaw_deg, _face_distance, state.instance);
+                frontend.boundary.set_face_attributes(_face, wrap_360(_face_yaw_deg), _face_distance, state.instance);
             } else {
                 // mark previous face invalid
                 frontend.boundary.reset_face(_face, state.instance);
@@ -187,9 +188,15 @@ void AP_Proximity_LightWareSF45B::process_message()
         if (!ignore_reading(angle_deg, distance_m) && (distance_m >= distance_min()) && (distance_m <= distance_max())) {
             // update shortest distance for this face
             if (!_face_distance_valid || (distance_m < _face_distance)) {
-                _face_yaw_deg = angle_deg;
+                _face_yaw_deg = wrap_180(angle_deg);
                 _face_distance = distance_m;
                 _face_distance_valid = true;
+                n_dupl = 0;
+            } else if (is_equal(distance_m,_face_distance)){
+                n_dupl++;
+                _face_yaw_deg = ((n_dupl)*_face_yaw_deg + wrap_180(angle_deg))/(n_dupl+1);
+            } else{
+                n_dupl = 0;
             }
 
             // update shortest distance for this mini sector

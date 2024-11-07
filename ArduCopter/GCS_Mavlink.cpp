@@ -1009,6 +1009,23 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_MAV_CMD_DO_MOTOR_TEST(const mavlink_comman
                                                (uint8_t)packet.x);
 }
 
+#if MODE_LOITER_ASSISTED_ENABLED == ENABLED
+MAV_RESULT GCS_MAVLINK_Copter::handle_attach_message(const mavlink_message_t &msg)
+{
+    if (msg.msgid != MAVLINK_MSG_ID_NAMED_VALUE_FLOAT) {
+        return MAV_RESULT_FAILED;
+    }
+    mavlink_named_value_float_t m;
+    mavlink_msg_named_value_float_decode(&msg, &m);
+    if (strcmp(m.name, "att_st") == 0) {
+        ModeLoiterAssisted::attached_state = (abs(m.value) > 0.01);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,"Attached State: %d\n", ModeLoiterAssisted::attached_state);
+        return MAV_RESULT_ACCEPTED;
+    }
+    return MAV_RESULT_FAILED;
+}
+#endif
+
 #if AP_WINCH_ENABLED
 MAV_RESULT GCS_MAVLINK_Copter::handle_MAV_CMD_DO_WINCH(const mavlink_command_int_t &packet)
 {
@@ -1505,11 +1522,18 @@ void GCS_MAVLINK_Copter::handle_message(const mavlink_message_t &msg)
         copter.terrain.handle_data(chan, msg);
         break;
 #endif
+
 #if TOY_MODE_ENABLED == ENABLED
     case MAVLINK_MSG_ID_NAMED_VALUE_INT:
         copter.g2.toy_mode.handle_message(msg);
         break;
 #endif
+#if MODE_LOITER_ASSISTED_ENABLED == ENABLED
+    case MAVLINK_MSG_ID_NAMED_VALUE_FLOAT:
+        handle_attach_message(msg);
+        break;
+#endif
+
     default:
         GCS_MAVLINK::handle_message(msg);
         break;

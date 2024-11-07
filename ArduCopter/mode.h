@@ -4,6 +4,7 @@
 #include <AP_Math/chirp.h>
 #include <AP_ExternalControl/AP_ExternalControl_config.h> // TODO why is this needed if Copter.h includes this
 #include <deque>
+#include <vector>
 
 class Parameters;
 class ParametersG2;
@@ -1313,6 +1314,7 @@ public:
     bool attach();
     bool detach();
     bool attached();
+    static bool attached_state;
 
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -1354,31 +1356,26 @@ private:
     DockingState _docking_state = DockingState::NOT_DOCKING;
 
     // Define parameters
-    AP_Float _pitch_to_fw_vel_gain;
-    AP_Float _roll_to_rt_vel_gain;
+    AP_Float _vel_max_cms;
     AP_Float _min_obs_dist_cm;
     AP_Float _yaw_hz;
-    AP_Float _yaw_dz;
     AP_Float _pos_filt_hz;
     AP_Float _dist_filt_hz;
     AP_Int32 _wv_window_size;
     AP_Float _wv_thresh;
-    AP_Float _dock_speed_mps;
-    AP_Float _undock_speed_mps;
+    AP_Float _dock_speed_cms;
+    AP_Float _undock_speed_cms;
 
     uint32_t _last_yaw_update_ms;
 
-    float _last_yaw_cmd_deg;
+    float _last_cfit_center_xy_m_x;
+    float _last_cfit_center_xy_m_y;
 
-    float _last_yaw_to_obs_deg;
-    float _last_dist_to_obs_m;
-
-    float _last_yaw_deg;
     Vector2f _last_vehicle_pos;
 
     LowPassFilterFloat _yaw_filter;
     LowPassFilterFloat _dist_filter;
-    LowPassFilterVector3f _dock_target_pos_filter;
+    LowPassFilterVector3f _dock_pos_filter;
 
     class WindowVar {
         public:
@@ -1401,18 +1398,63 @@ private:
     bool _ready_to_dock{false};
 
     Vector2p _xy_pos; // xy pos in NEU cm
-    Vector2f _xy_vel; // xy vel in NEU cm
+    Vector2f _xy_vel_cms; // xy vel in NEU cm
     const Vector2f _xy_accel{0,0};
     float _z_pos;
     float _z_vel{0};
     const float _z_accel{0};
     float _filt_yaw_cmd_deg;
     float _bearing_cd;
+    uint32_t _last_log_time;
 
     bool _lock_commands{false}; //Whether or not to lock the estimates for position
 
     Vector3f _current_vehicle_position;
-    Vector3f _filt_dock_target_pos;
+    Vector3f _filt_dock_xyz_NEU_m;
+
+    uint32_t _last_millis;
+    class YawBuffer {
+        public:
+            YawBuffer() : YawBuffer(100) {}
+            YawBuffer(uint32_t buffer_size) : _size(buffer_size), _buffer(buffer_size, 0.0f), _times(buffer_size, 0), index(0) {}
+            bool looped = false;
+            uint32_t index;                 // Current index in the buffer
+
+            // Add a new yaw value to the buffer
+            void addYaw(float yaw) {
+                _buffer[index] = yaw;
+                _times[index] = AP_HAL::millis();
+                if (index + 1 > _size) {
+                    looped = true;
+                }
+                index = (index + 1) % _size; // Circular increment
+            }
+
+            // Get the yaw value with the specified delay in milliseconds
+            bool getDelayedYaw(uint32_t time_delay, float& delayed_yaw) const {
+                for (uint32_t i = 0; i < _size; ++i) {
+                    uint32_t idx = (index + _size - i - 1) % _size; // Traverse backward through buffer
+                    if (looped || idx < index) {
+                        if ((AP_HAL::millis() - _times[idx]) >= time_delay && _times[idx] > 0) {
+                            delayed_yaw = _buffer[idx];
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+        private:
+            uint32_t _size;                  // Size of the buffer
+            std::vector<float> _buffer; // Circular buffer to store yaw values
+            std::vector<float> _times; // Circular buffer to store time values
+            
+            
+    };
+    YawBuffer _yaw_buf;
+    uint32_t _time_since_last_yaw;
+    uint32_t _init_time;
+
 
 #if AC_PRECLAND_ENABLED
     bool _precision_loiter_enabled;
