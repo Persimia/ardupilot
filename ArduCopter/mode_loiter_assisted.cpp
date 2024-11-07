@@ -11,14 +11,14 @@
  */
 
 #define VEL_MAX_DEFAULT                      100
-#define MIN_OBS_DIST_CM_DEFAULT              100
+#define MIN_OBS_DIST_CM_DEFAULT              50
 #define YAW_HZ_DEFAULT                       100.0
 #define DIST_HZ_DEFAULT                      100.0
 #define POS_HZ_DEFAULT                       100.0
 #define WV_WIND_DEFAULT                      5
 #define WV_THRESH_DEFAULT                    0.1 
-#define DOCK_SPEED_CMS_DEFAULT               100.0
-#define UNDOCK_SPEED_CMS_DEFAULT             500.0
+#define DOCK_SPEED_CMS_DEFAULT               10.0
+#define UNDOCK_SPEED_CMS_DEFAULT             50.0
 
 bool ModeLoiterAssisted::attached_state = false;  // Initialization
 
@@ -262,6 +262,7 @@ void ModeLoiterAssisted::run()
     float target_roll, target_pitch;
     float target_yaw_rate = 0.0f;
     float target_climb_rate = 0.0f;
+    float dt = G_Dt;
 
     // check for filter change
     if (!is_equal(_yaw_filter.get_cutoff_freq(), _yaw_hz.get())) {
@@ -430,17 +431,22 @@ void ModeLoiterAssisted::run()
 
                 // Docking state controller
                 switch (_docking_state){
-                    case DockingState::ATTACH_MANEUVER: 
-                        pos_control->input_vel_accel_xy(_xy_vel_cms, _xy_accel);
-                        pos_control->input_vel_accel_z(_z_vel, _z_accel);
+                    case DockingState::ATTACH_MANEUVER: {
+                        // // pos_control->input_vel_accel_xy(_xy_vel_cms, _xy_accel);
+                        // // pos_control->input_vel_accel_z(_z_vel, _z_accel);
                         // pos_control->set_vel_desired_xy_cms(_xy_vel_cms);
                         // // pos_control->set_accel_desired_xy_cmss(_xy_accel);
                         // pos_control->set_vel_desired_z_cms(_z_vel);
                         filt_heading_cmd_deg = wrap_180(_bearing_cd/100.0f);
+                        // integrate current pos to new target pos
+                        Vector2f target_xy_NEU_cm = pos_control->get_pos_target_cm().tofloat().xy() + _xy_vel_cms*dt;
+                        pos_control->set_pos_target_xy_cm(target_xy_NEU_cm.x, target_xy_NEU_cm.y);
+
                         if(ModeLoiterAssisted::attached_state) { //signal from sensor
                             attached();
                         }
                         break;
+                    }
 
                     case DockingState::DETACH_MANEUVER:
                         pos_control->input_vel_accel_xy(reverse_vel, _xy_accel); // back up the way we came in
@@ -470,7 +476,6 @@ void ModeLoiterAssisted::run()
                         if (dt_meas) {
 
                         };
-                        float dt = G_Dt;
                         // float dt = 1;
 
                         // xy pos control ==============
