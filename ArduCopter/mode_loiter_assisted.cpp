@@ -412,8 +412,8 @@ void ModeLoiterAssisted::run()
                     _xy_vel_cms = vec_to_target_2d_m.normalized()*_dock_speed_cms.get();
                     _bearing_cd = get_bearing_cd(_current_vehicle_position.xy(), _filt_dock_xyz_NEU_m.xy());
                 }
-                Vector2f reverse_vel = _xy_vel_cms.normalized()*-_undock_speed_cms.get()*100.0f; // convert m/s to cm/s
-                float reverse_vel_z = ((0.0<_z_vel)-(_z_vel<0.0))*-_undock_speed_cms.get()*100.0f;
+                Vector2f reverse_vel = _xy_vel_cms.normalized()*-_undock_speed_cms.get();
+                float reverse_vel_z = ((0.0<_z_vel)-(_z_vel<0.0))*-_undock_speed_cms.get();
 
                 if (millis()-_last_log_time > 100) {
                     AP::logger().Write("LASS","TimeUS,targX,targY,velX,velY,Dkg","smmnn-","F0000-","QffffB",
