@@ -10,7 +10,7 @@
  * Init and run calls for loiter flight mode
  */
 
-#define VEL_MAX_DEFAULT                      100
+#define VEL_MAX_DEFAULT                      50
 #define MIN_OBS_DIST_CM_DEFAULT              50
 #define YAW_HZ_DEFAULT                       100.0
 #define DIST_HZ_DEFAULT                      100.0
@@ -170,6 +170,10 @@ bool ModeLoiterAssisted::attach() { // init attach engaged via RC_Channel
     _docking_state = DockingState::ATTACH_MANEUVER;
 
     _lock_commands = true;
+    // if (ahrs.get_relative_position_NED_origin(_current_vehicle_position)){
+    //     pos_control->set_pos_target_xy_cm(_current_vehicle_position.x*100, _current_vehicle_position.y*100); // TODO Remove this eventually
+
+    // }
 
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Attach primed");
     return true;
@@ -385,7 +389,7 @@ void ModeLoiterAssisted::run()
                     _last_cfit_center_xy_m_x = cfit_center_xy_m.x;
                     _last_cfit_center_xy_m_y = cfit_center_xy_m.y;
 
-                    // // Start tracking global position of nearest point
+                    // Start tracking global position of nearest point
                     float x = cfit_center_xy_m.x;
                     float y = cfit_center_xy_m.y;
                     float z = _current_vehicle_position.z;
