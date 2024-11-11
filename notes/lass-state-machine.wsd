@@ -1,0 +1,75 @@
+@startuml Lass State Machine
+
+
+state ModeLoiterAssisted {
+
+' States
+state "init()" as init: \
+sets default state based on whether we are attached or not
+
+' Transitions
+[*] --> init : set_mode()
+init --> [*] : else
+init --> init : if (AltHoldModeState::Flying || attached)
+
+' ==========================
+--
+
+state "run()" as run{
+
+' States
+state Default: \
+Pilot velocity control relative to dock. \n\
+heading locked
+
+State AttachLeadUp: \
+use pos control to hit pos vel target \n\
+keep yaw pointed at obstacle
+
+State AttachCoast: \
+pitch set based on lead up \n\
+roll, pitch, yaw rates to zero
+
+state AttachedVegetable: \
+disable crash checks \n\
+disable mode changes 
+
+State DetachPrime: \
+pitch set based on reverse of lead up \n\
+
+State DetachCoast: \
+send detach signal to mcu \n\
+roll, pitch, yaw rates held constant
+
+State DetachRecover: \
+use pos control to get to safe distance
+
+State Abort: \
+abort state to escape blade
+
+
+' Transitions
+[*] --> Default
+[*] --> AttachedVegetable : attached
+Default --> AttachLeadUp : engageDocking()
+AttachLeadUp --> Default : variance too high
+AttachLeadUp --> AttachCoast : at_coast_dist
+AttachCoast --> Abort : timeout
+AttachCoast --> AttachedVegetable : attached
+AttachedVegetable --> DetachPrime : detach_engage
+DetachPrime --> DetachCoast : at_attitude
+DetachCoast --> DetachRecover : at_coast_dist
+DetachRecover --> Default : at_safe_dist
+
+
+}
+
+[*] --> run : update_flight_mode()
+run --> [*] : !AltHoldModeState::Flying || lass_disengage
+}
+
+
+
+@enduml
+
+' https://plantuml.com/state-diagram
