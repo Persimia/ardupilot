@@ -1318,14 +1318,6 @@ public:
 
     static const struct AP_Param::GroupInfo var_info[];
 
-#if FRAME_CONFIG == HELI_FRAME
-    bool allows_inverted() const override { return true; };
-#endif
-
-#if AC_PRECLAND_ENABLED
-    void set_precision_loiter_enabled(bool value) { _precision_loiter_enabled = value; }
-#endif
-
 protected:
 
     const char *name() const override { return "LOITER_ASSISTED"; }
@@ -1335,26 +1327,7 @@ protected:
     int32_t wp_bearing() const override;
     float crosstrack_error() const override { return pos_control->crosstrack_error();}
 
-#if AC_PRECLAND_ENABLED
-    bool do_precision_loiter();
-    void precision_loiter_xy();
-#endif
-
 private:
-    float _distance_target_cm;
-    bool _target_acquired;
-    bool _crash_check_enabled {true};
-
-    // docking state
-    enum class DockingState : uint8_t {
-        NOT_DOCKING = 0,            // default loiter assisted mode (not in attach/detach mode)
-        ATTACH_MANEUVER,            // attach maneuver engaged
-        DETACH_MANEUVER,            // detach maneuver engaged
-        ATTACHED                    // how to behave when we're attached
-    };
-
-    DockingState _docking_state = DockingState::NOT_DOCKING;
-
     // Define parameters
     AP_Float _vel_max_cms;
     AP_Float _min_obs_dist_cm;
@@ -1366,7 +1339,49 @@ private:
     AP_Float _dock_speed_cms;
     AP_Float _undock_speed_cms;
 
-    uint32_t _last_yaw_update_ms;
+    // Dock target states
+    enum class DockTargetLockState : uint8_t {
+        NONE = 0,                   // state unset
+        NOT_FOUND,                  // no potential target detected
+        FOUND,                      // possible target, no convergence
+        FOUND_STABLE,               // dock target is found and converged
+        LOCKED                      // target locked
+    };
+    DockTargetLockState _docking_target_lock_state = DockTargetLockState::NONE;
+    void set_dock_target_state(DockTargetLockState new_state);
+
+    //====================================================================
+    /*---------------------------------------------------------------------------*/
+    /* Finite State Machine facilities... */
+    enum class Event : uint8_t {
+        NONE, /* dispatched to AO before entering event-loop */
+        ENTRY_SIG, /* for triggering the entry action in a state */
+        EXIT_SIG,  /* for triggering the exit action from a state */
+        RUN_FLIGHT_CODE  /* first signal available to the users */
+    };
+    Event _external_event = Event::NONE;
+    enum class Status : uint8_t { 
+        TRAN_STATUS, 
+        HANDLED_STATUS, 
+        IGNORED_STATUS, 
+        INIT_STATUS 
+    };
+    typedef Status (ModeLoiterAssisted::*StateHandler)(const Event e);
+    void evaluate_transitions(const Event e);
+    void run_flight_code();
+    /*---------------------------------------------------------------------------*/
+    /* Finite State Machine States... */
+    Status Default(const Event e);
+    StateHandler _lass_state = &ModeLoiterAssisted::Default;
+    /*---------------------------------------------------------------------------*/
+    /* Finite State Machine Macros... */
+    #define TRAN(target_) (_lass_state = (StateHandler)(target_), TRAN_STATUS)
+    /*---------------------------------------------------------------------------*/
+    //====================================================================
+
+    float _distance_target_cm;
+    bool _crash_check_enabled {true};
+
 
     float _last_cfit_center_xy_m_x;
     float _last_cfit_center_xy_m_y;
@@ -1406,8 +1421,6 @@ private:
     float _filt_yaw_cmd_deg;
     float _bearing_cd;
     uint32_t _last_log_time;
-
-    bool _lock_commands{false}; //Whether or not to lock the estimates for position
 
     Vector3f _current_vehicle_position;
     Vector3f _filt_dock_xyz_NEU_m;
@@ -1452,14 +1465,8 @@ private:
             
     };
     YawBuffer _yaw_buf;
-    uint32_t _time_since_last_yaw;
-    uint32_t _init_time;
 
-
-#if AC_PRECLAND_ENABLED
-    bool _precision_loiter_enabled;
-    bool _precision_loiter_active; // true if user has switched on prec loiter
-#endif
+    bool _attached{false};
 
 };
 

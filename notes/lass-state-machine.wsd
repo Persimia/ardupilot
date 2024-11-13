@@ -18,48 +18,63 @@ init --> init : if (AltHoldModeState::Flying || attached)
 state "run()" as run{
 
 ' States
-state Default: \
+state Lass: \
 Pilot velocity control relative to dock. \n\
 heading locked
 
-State AttachLeadUp: \
+State AttachManeuver {
+State LeadUp: \
 use pos control to hit pos vel target \n\
 keep yaw pointed at obstacle
 
-State AttachCoast: \
+State CoastIn: \
 pitch set based on lead up \n\
 roll, pitch, yaw rates to zero
+
+State WindDown: \
+relax the controllers to smoothly settle
+}
+
 
 state AttachedVegetable: \
 disable crash checks \n\
 disable mode changes 
 
-State DetachPrime: \
-pitch set based on reverse of lead up \n\
+State DetachManeuver {
+State WindUp: \
+pitch set based on reverse of lead up
 
-State DetachCoast: \
+State CoastOut: \
 send detach signal to mcu \n\
 roll, pitch, yaw rates held constant
 
-State DetachRecover: \
+State Recover: \
 use pos control to get to safe distance
+}
+
+State Default: \
+go to normal loiter code when nothing detected
 
 State Abort: \
 abort state to escape blade
 
 
 ' Transitions
-[*] --> Default
+[*] --> Lass : dock
+[*] --> Default : no_dock
+Lass --> Default : no_dock
+Default --> Lass : dock_found
 [*] --> AttachedVegetable : attached
-Default --> AttachLeadUp : engageDocking()
-AttachLeadUp --> Default : variance too high
-AttachLeadUp --> AttachCoast : at_coast_dist
-AttachCoast --> Abort : timeout
-AttachCoast --> AttachedVegetable : attached
-AttachedVegetable --> DetachPrime : detach_engage
-DetachPrime --> DetachCoast : at_attitude
-DetachCoast --> DetachRecover : at_coast_dist
-DetachRecover --> Default : at_safe_dist
+Lass --> LeadUp : engageDocking()
+LeadUp --> Lass : variance too high
+LeadUp --> CoastIn : at_coast_dist
+CoastIn --> Abort : timeout
+CoastIn --> WindDown : attached
+WindDown --> AttachedVegetable : settled
+AttachedVegetable --> WindUp : detach_engage
+WindUp --> CoastOut : at_attitude
+CoastOut --> Recover : at_coast_dist
+Recover --> Lass : at_safe_dist
 
 
 }
