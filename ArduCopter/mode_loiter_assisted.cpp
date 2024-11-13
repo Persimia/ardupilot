@@ -87,6 +87,13 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("UNDOCK_SPD", 9, ModeLoiterAssisted, _undock_speed_cms, UNDOCK_SPEED_CMS_DEFAULT),
 
+    // @Param{Copter}: _LDR_HZ
+    // @DisplayName: Lidar sweep rate in Hz
+    // @Description: Lidar sweep rate in Hz
+    // @Units: hz
+    // @User: Advanced
+    AP_GROUPINFO("LDR_HZ", 10, ModeLoiterAssisted, _lidar_sweep_rate_hz, 3.73),
+
     AP_GROUPEND
 };
 
@@ -117,7 +124,6 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     InitFilters();
 
     // Set State (assuming not attached for now)
-    set_dock_target_state(DockTargetLockState::NOT_FOUND);
     TRAN(ModeLoiterAssisted::Default);
     (this->*_lass_state)(Event::ENTRY_SIG); // perform entry actions
 
@@ -161,7 +167,8 @@ void ModeLoiterAssisted::AbortExit() {
 void ModeLoiterAssisted::InitFilters() {
     _yaw_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _yaw_hz.get());
     _dist_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dist_filt_hz.get());
-    _dock_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _pos_filt_hz.get()); // TODO: use custom dock hz param
+    _dock_pos_filter.set_cutoff_frequency(_lidar_sweep_rate_hz.get(), _pos_filt_hz.get()); 
+    _dock_norm_filter.set_cutoff_frequency(_lidar_sweep_rate_hz.get(), _pos_filt_hz.get()); 
     _dock_target_window_var = WindowVar(_wv_window_size.get()); // reinit with new min samples
     _yaw_buf = ModeLoiterAssisted::YawBuffer(); // reinit yaw buffer
 }
@@ -177,6 +184,9 @@ void ModeLoiterAssisted::UpdateFilters() {
     if (!is_equal(_dock_pos_filter.get_cutoff_freq(), _pos_filt_hz.get())) { // TODO update to dock_hz
         _dock_pos_filter.set_cutoff_frequency(_pos_filt_hz.get());
     }
+    if (!is_equal(_dock_norm_filter.get_cutoff_freq(), _pos_filt_hz.get())) { // TODO update to dock_hz
+        _dock_norm_filter.set_cutoff_frequency(_pos_filt_hz.get());
+    }
     if (!is_equal(_dock_target_window_var.get_window_size(), _wv_window_size.get())) {
         _dock_target_window_var.set_new_window_size(_wv_window_size.get());
     }
@@ -190,17 +200,14 @@ void ModeLoiterAssisted::find_dock_target(){
     _flags.DOCK_FOUND = true;
 
     if (!is_equal(cfit_center_xy_m.x,_last_cfit_center_xy_m_x) || !is_equal(cfit_center_xy_m.y,_last_cfit_center_xy_m_y)){ // when new lidar data comes in
+        // Filter and evaluate dock center position
         _last_cfit_center_xy_m_x = cfit_center_xy_m.x;
         _last_cfit_center_xy_m_y = cfit_center_xy_m.y;
-
-        // Start tracking global position of nearest point
         float x = cfit_center_xy_m.x;
         float y = cfit_center_xy_m.y;
         float z = _cur_pos_NED_m.z;
         const Vector3f dock_pos{x,y,z};
-
         _filt_dock_xyz_NEU_m = _dock_pos_filter.apply(dock_pos); // low pass filter on dock position
-        
         _flags.DOCK_STABLE = false;
         Vector3f dock_target_var;
         if (_dock_target_window_var.apply(dock_pos, dock_target_var)) { // keep track of variance (deviation) of center
@@ -208,8 +215,13 @@ void ModeLoiterAssisted::find_dock_target(){
                 _flags.DOCK_STABLE = true;
             }
         }
+
+        // Filter and evaluate dock normal vector
+        _filt_dock_normal_NEU = _dock_norm_filter.apply(dock_normal_vec);
+
     }
-    _filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/100.0f;
+    // _filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/100.0f;
+    _filt_heading_cmd_deg = atan2f(dock_normal_vec.y,dock_normal_vec.x);
 }
 
 // void ModeLoiterAssisted::set_dock_target_state(DockTargetLockState new_state){
@@ -224,6 +236,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Default(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:
         _lass_state_name = StateName::Default;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Default state");
         _crash_check_enabled = true;
         status = Status::HANDLED_STATUS;
         break;
@@ -260,6 +273,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:
         _lass_state_name = StateName::Lass;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Lass state");
         _crash_check_enabled = true;
         status = Status::HANDLED_STATUS;
         break;
@@ -319,6 +333,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:
         _lass_state_name = StateName::LeadUp;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering LeadUp state");
         #if AP_DDS_ENABLED
         AP_DDS_Client::need_to_pub_attach_detach = true;
         AP_DDS_Client::desire_attach = true;
@@ -336,7 +351,16 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         break;
     case Event::RUN_FLIGHT_CODE:
         // Flight Code
-        
+        pos_control->input_pos_vel_accel_xy(_xy_vel_cms, _xy_accel);
+        // // pos_control->input_vel_accel_z(_z_vel, _z_accel);
+        // pos_control->set_vel_desired_xy_cms(_xy_vel_cms);
+        // // pos_control->set_accel_desired_xy_cmss(_xy_accel);
+        // pos_control->set_vel_desired_z_cms(_z_vel);
+        filt_heading_cmd_deg = wrap_180(_bearing_cd/100.0f);
+        // integrate current pos to new target pos
+        Vector2f target_xy_NEU_cm = pos_control->get_pos_target_cm().tofloat().xy() + _xy_vel_cms*dt;
+        pos_control->set_pos_target_xy_cm(target_xy_NEU_cm.x, target_xy_NEU_cm.y);
+
         break;
     default:
         fprintf(stderr, "I am in hell");
@@ -352,6 +376,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:
         _lass_state_name = StateName::CoastIn;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastIn state");
         _crash_check_enabled = false;
         status = Status::HANDLED_STATUS;
         break;
@@ -380,6 +405,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:
         _lass_state_name = StateName::WindDown;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindDown state");
         _crash_check_enabled = false;
         status = Status::HANDLED_STATUS;
         break;
@@ -408,6 +434,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:
         _lass_state_name = StateName::Vegetable;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Vegetable state");
         _crash_check_enabled = false;
         status = Status::HANDLED_STATUS;
         break;

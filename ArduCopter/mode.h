@@ -1337,6 +1337,7 @@ private:
     AP_Float _wv_thresh;
     AP_Float _dock_speed_cms;
     AP_Float _undock_speed_cms;
+    AP_Float _lidar_sweep_rate_hz;
 
     // // Dock target states
     // enum class DockTargetLockState : uint8_t {
@@ -1421,6 +1422,7 @@ private:
     void AbortExit();
     void InitFilters();
     void UpdateFilters();
+    Vector2f _filt_dock_normal_NEU;
 
     float _dock_variance;
     float _distance_target_cm;
@@ -1449,6 +1451,7 @@ private:
     LowPassFilterFloat _yaw_filter;
     LowPassFilterFloat _dist_filter;
     LowPassFilterVector3f _dock_pos_filter;
+    LowPassFilterVector2f _dock_norm_filter;
 
     class WindowVar {
         public:
