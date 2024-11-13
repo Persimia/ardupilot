@@ -1311,10 +1311,9 @@ public:
     bool allows_autotune() const override { return true; }
     bool crash_check_enabled() const override { return _crash_check_enabled; }
 
-    bool attach();
-    bool detach();
-    bool attached();
-    static bool attached_state;
+    void attach();
+    void detach();
+    void set_attached_status(float att_st);
 
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -1339,47 +1338,106 @@ private:
     AP_Float _dock_speed_cms;
     AP_Float _undock_speed_cms;
 
-    // Dock target states
-    enum class DockTargetLockState : uint8_t {
-        NONE = 0,                   // state unset
-        NOT_FOUND,                  // no potential target detected
-        FOUND,                      // possible target, no convergence
-        FOUND_STABLE,               // dock target is found and converged
-        LOCKED                      // target locked
-    };
-    DockTargetLockState _docking_target_lock_state = DockTargetLockState::NONE;
-    void set_dock_target_state(DockTargetLockState new_state);
+    // // Dock target states
+    // enum class DockTargetLockState : uint8_t {
+    //     NONE = 0,                   // state unset
+    //     NOT_FOUND,                  // no potential target detected
+    //     FOUND,                      // possible target, no convergence
+    //     FOUND_STABLE,               // dock target is found and converged
+    //     LOCKED                      // target locked
+    // };
+    // DockTargetLockState _docking_target_lock_state = DockTargetLockState::NONE;
+    // void set_dock_target_state(DockTargetLockState new_state);
 
     //====================================================================
     /*---------------------------------------------------------------------------*/
     /* Finite State Machine facilities... */
     enum class Event : uint8_t {
-        NONE, /* dispatched to AO before entering event-loop */
+        NONE = 0, /* dispatched to AO before entering event-loop */
         ENTRY_SIG, /* for triggering the entry action in a state */
         EXIT_SIG,  /* for triggering the exit action from a state */
+        EVALUATE_TRANSITIONS,
         RUN_FLIGHT_CODE  /* first signal available to the users */
     };
-    Event _external_event = Event::NONE;
+    struct Flags {
+        bool DOCK_FOUND = false;   // Default is false, can be set to true as needed
+        bool DOCKING_ENGAGED = false;
+        bool DOCK_STABLE = false;
+        bool AT_COAST_IN_DIST = false;
+        bool ATTACHED = false;
+        bool WINDED_DOWN = false;
+        bool ATTACH_BUTTON_PRESSED = false;
+    };
+    Flags _flags;
     enum class Status : uint8_t { 
-        TRAN_STATUS, 
+        TRAN_STATUS = 0, 
         HANDLED_STATUS, 
         IGNORED_STATUS, 
         INIT_STATUS 
     };
     typedef Status (ModeLoiterAssisted::*StateHandler)(const Event e);
-    void evaluate_transitions(const Event e);
+    void evaluate_transitions();
     void run_flight_code();
+    Flags evaluate_flags();
     /*---------------------------------------------------------------------------*/
     /* Finite State Machine States... */
     Status Default(const Event e);
+    Status Lass(const Event e);
+    Status LeadUp(const Event e);
+    Status CoastIn(const Event e);
+    Status WindDown(const Event e);
+    Status Vegetable(const Event e);
+    Status WindUp(const Event e);
+    Status CoastOut(const Event e);
+    Status Recover(const Event e);
+    Status Abort(const Event e);
+
+    enum class StateName : uint8_t {
+        Default = 0,
+        Lass,
+        LeadUp,
+        CoastIn,
+        WindDown,
+        Vegetable,
+        WindUp,
+        CoastOut,
+        Recover,
+        Abort
+    };
+
+
     StateHandler _lass_state = &ModeLoiterAssisted::Default;
+    StateName _lass_state_name = StateName::Default;
     /*---------------------------------------------------------------------------*/
     /* Finite State Machine Macros... */
-    #define TRAN(target_) (_lass_state = (StateHandler)(target_), TRAN_STATUS)
+    #define TRAN(target_) (_lass_state = (StateHandler)(target_), Status::TRAN_STATUS)
     /*---------------------------------------------------------------------------*/
     //====================================================================
 
+    /*---------------------------------------------------------------------------*/
+    /* Dock target variables... */
+    float _filt_heading_cmd_deg;
+    void find_dock_target();
+    void AbortExit();
+    void InitFilters();
+    void UpdateFilters();
+
+    float _dock_variance;
     float _distance_target_cm;
+    Vector2p _xy_pos; // xy pos in NEU cm
+    Vector2f _xy_vel_cms; // xy vel in NEU cm
+    const Vector2f _xy_accel{0,0};
+    float _z_pos;
+    float _z_vel{0};
+    const float _z_accel{0};
+    float _filt_yaw_cmd_deg;
+    float _bearing_cd;
+    uint32_t _last_log_time;
+    Vector3f _cur_pos_NED_m;
+    Vector3f _filt_dock_xyz_NEU_m;
+    /*---------------------------------------------------------------------------*/
+
+
     bool _crash_check_enabled {true};
 
 
@@ -1412,18 +1470,7 @@ private:
     WindowVar _dock_target_window_var;
     bool _ready_to_dock{false};
 
-    Vector2p _xy_pos; // xy pos in NEU cm
-    Vector2f _xy_vel_cms; // xy vel in NEU cm
-    const Vector2f _xy_accel{0,0};
-    float _z_pos;
-    float _z_vel{0};
-    const float _z_accel{0};
-    float _filt_yaw_cmd_deg;
-    float _bearing_cd;
-    uint32_t _last_log_time;
-
-    Vector3f _current_vehicle_position;
-    Vector3f _filt_dock_xyz_NEU_m;
+    
 
     uint32_t _last_millis;
     class YawBuffer {

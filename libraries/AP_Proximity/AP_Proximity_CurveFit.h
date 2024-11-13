@@ -35,7 +35,7 @@ public:
 
     // Set "heading" to center in Rad and "distance" to surface in m given current position from EKF origin.
     // Heading and distance are unchanged if curve fit failed
-    bool get_target(float &heading, float &distance, Vector2f &tangent_vec, Vector2f &normal_vec, Vector2f &center);
+    bool get_target(Vector2f &normal_vec, Vector2f &center);
 
     // Add coordinate of obstacle to data set given yaw "angle" to obstacle in Radians 
     // "distance" to obstacle in meters "current_position" in meters from and vehicle "yaw" attitude in Radians 

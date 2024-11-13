@@ -60,17 +60,16 @@ abort state to escape blade
 
 
 ' Transitions
-[*] --> Lass : dock
-[*] --> Default : no_dock
-Lass --> Default : no_dock
-Default --> Lass : dock_found
-[*] --> AttachedVegetable : attached
-Lass --> LeadUp : engageDocking()
-LeadUp --> Lass : variance too high
-LeadUp --> CoastIn : at_coast_dist
-CoastIn --> Abort : timeout
-CoastIn --> WindDown : attached
-WindDown --> AttachedVegetable : settled
+[*] --> Default
+Lass --> Default : !DOCK_FOUND
+Default --> Lass : DOCK_FOUND
+' [*] --> AttachedVegetable : attached
+Lass --> LeadUp : DOCKING_ENGAGED
+LeadUp --> CoastIn : AT_COAST_IN_DIST
+' CoastIn --> Abort : timeout
+CoastIn --> WindDown : ATTACHED
+WindDown --> AttachedVegetable : WINDED_DOWN
+WindDown --> Abort : FALLING
 AttachedVegetable --> WindUp : detach_engage
 WindUp --> CoastOut : at_attitude
 CoastOut --> Recover : at_coast_dist

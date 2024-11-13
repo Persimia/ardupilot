@@ -1018,8 +1018,7 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_attach_message(const mavlink_message_t &ms
     mavlink_named_value_float_t m;
     mavlink_msg_named_value_float_decode(&msg, &m);
     if (strcmp(m.name, "att_st") == 0) {
-        ModeLoiterAssisted::attached_state = (abs(m.value) > 0.01);
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO,"Attached State: %d\n", ModeLoiterAssisted::attached_state);
+        copter.mode_loiter_assisted.set_attached_status(m.value);
         return MAV_RESULT_ACCEPTED;
     }
     return MAV_RESULT_FAILED;

@@ -58,12 +58,12 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("_LDR_HZ", 6, AP_Proximity_CurveFit, _lidar_sweep_rate_hz, 3.73),
 
-    // @Param{Copter}: _CNTR_HZ
-    // @DisplayName: Center position cutoff filter hz
-    // @Description: Center position cutoff filter hz
-    // @Units: hz
-    // @User: Advanced
-    AP_GROUPINFO("_CNTR_HZ", 7, AP_Proximity_CurveFit, _center_filter_cutoff_hz, 1),
+    // // @Param{Copter}: _CNTR_HZ
+    // // @DisplayName: Center position cutoff filter hz
+    // // @Description: Center position cutoff filter hz
+    // // @Units: hz
+    // // @User: Advanced
+    // AP_GROUPINFO("_CNTR_HZ", 7, AP_Proximity_CurveFit, _center_filter_cutoff_hz, 1),
 
     AP_GROUPEND
 };
@@ -71,41 +71,37 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
 AP_Proximity_CurveFit::AP_Proximity_CurveFit()
 {
     AP_Param::setup_object_defaults(this, var_info);
-    _center_filter.set_cutoff_frequency(_lidar_sweep_rate_hz, _center_filter_cutoff_hz); // TODO: use custom dock hz param
-
+    // _center_filter.set_cutoff_frequency(_lidar_sweep_rate_hz, _center_filter_cutoff_hz);
 }
 
 
-bool AP_Proximity_CurveFit::get_target(float &heading, float &distance, Vector2f &tangent_vec, Vector2f &normal_vec, Vector2f &center)
+bool AP_Proximity_CurveFit::get_target(Vector2f &normal_vec, Vector2f &center)
 {
     Vector2f curr_pos;
 
-    if(!AP::ahrs().get_relative_position_NE_origin(curr_pos)){
-        _center_filter.reset();
-        return false;} // No Position Estimate
-    if(!compute_fit(curr_pos, _tangent_vec, _normal_vec, _center, _fit_quality, _fit_type, _fit_num)){
-        _center_filter.reset();
-        return false;}// Unable to solve heading, distance
-    // Vector from vehicle position to center of curvature;
-    Vector2f r_pos_center = _center - curr_pos;
-    switch (_fit_type)
-    {
-        case AP_Proximity_CurveFit::CenterType::POINT:
-            FALLTHROUGH;
-        case AP_Proximity_CurveFit::CenterType::LINE:
-            distance = r_pos_center.length();
-            heading = wrap_PI(r_pos_center.angle());
-            tangent_vec = _tangent_vec;
-            normal_vec = _normal_vec;
-            center = _center;
-            break;
-        case AP_Proximity_CurveFit::CenterType::NONE:
-            FALLTHROUGH;
-        default:
-            return false;
-    }
-
-    log_target(heading, distance); //write to dataflash log
+    if(!AP::ahrs().get_relative_position_NE_origin(curr_pos)){return false;} // No Position Estimate
+    if(!compute_fit(curr_pos, _tangent_vec, _normal_vec, _center, _fit_quality, _fit_type, _fit_num)){return false;}// Unable to solve heading, distance
+    // // Vector from vehicle position to center of curvature;
+    // Vector2f r_pos_center = _center - curr_pos;
+    // switch (_fit_type)
+    // {
+    //     case AP_Proximity_CurveFit::CenterType::POINT:
+    //         FALLTHROUGH;
+    //     case AP_Proximity_CurveFit::CenterType::LINE:
+    //         distance = r_pos_center.length();
+    //         heading = wrap_PI(r_pos_center.angle());
+    //         tangent_vec = _tangent_vec;
+    //         normal_vec = _normal_vec;
+    //         center = _center;
+    //         break;
+    //     case AP_Proximity_CurveFit::CenterType::NONE:
+    //         FALLTHROUGH;
+    //     default:
+    //         return false;
+    // }
+    // log_target(heading, distance); //write to dataflash log
+    normal_vec = _normal_vec;
+    center = _center;
     return true;
 }
 
