@@ -1338,6 +1338,7 @@ private:
     AP_Float _dock_speed_cms;
     AP_Float _undock_speed_cms;
     AP_Float _lidar_sweep_rate_hz;
+    AP_Float _coast_in_dist;
 
     // // Dock target states
     // enum class DockTargetLockState : uint8_t {
@@ -1417,12 +1418,16 @@ private:
 
     /*---------------------------------------------------------------------------*/
     /* Dock target variables... */
-    float _filt_heading_cmd_deg;
+    // float _filt_heading_cmd_deg;
     void find_dock_target();
     void AbortExit();
     void InitFilters();
     void UpdateFilters();
+    void evaluateDistFlags();
     Vector2f _filt_dock_normal_NEU;
+    float _locked_heading_deg;
+    Vector2f _locked_vel_NE_cms;
+    float _dist_to_dock_cm;
 
     float _dock_variance;
     float _distance_target_cm;

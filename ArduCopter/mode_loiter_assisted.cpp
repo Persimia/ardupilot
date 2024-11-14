@@ -94,6 +94,12 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("LDR_HZ", 10, ModeLoiterAssisted, _lidar_sweep_rate_hz, 3.73),
 
+    // @Param{Copter}: CID_M
+    // @DisplayName: Coast in distance in cm
+    // @Description: Coast in distance in cm
+    // @Units: cm
+    // @User: Advanced
+    AP_GROUPINFO("CID_CM", 11, ModeLoiterAssisted, _coast_in_dist, 20),
     AP_GROUPEND
 };
 
@@ -143,10 +149,11 @@ void ModeLoiterAssisted::run()
     // Update filters (simply check for param changes)
     UpdateFilters();
 
-    
-
     // calculate dock's position. compute navigation data
     find_dock_target();
+
+    // evaluate distance flags
+    evaluateDistFlags();
 
     // evaluate transitions
     evaluate_transitions();
@@ -154,6 +161,13 @@ void ModeLoiterAssisted::run()
     // run flight code for current state
     (this->*_lass_state)(Event::RUN_FLIGHT_CODE);
 
+}
+
+void ModeLoiterAssisted::evaluateDistFlags() {
+    _flags.AT_COAST_IN_DIST = false;
+    if (!_flags.DOCK_FOUND) { return;}
+    _dist_to_dock_cm = (_filt_dock_xyz_NEU_m.xy()-_cur_pos_NED_m.xy()).length()*100.0f;
+    if (_dist_to_dock_cm < _coast_in_dist) {_flags.AT_COAST_IN_DIST = true;}
 }
 
 void ModeLoiterAssisted::AbortExit() {
@@ -209,10 +223,14 @@ void ModeLoiterAssisted::find_dock_target(){
         const Vector3f dock_pos{x,y,z};
         _filt_dock_xyz_NEU_m = _dock_pos_filter.apply(dock_pos); // low pass filter on dock position
         _flags.DOCK_STABLE = false;
+        _flags.DOCKING_ENGAGED = false;
         Vector3f dock_target_var;
         if (_dock_target_window_var.apply(dock_pos, dock_target_var)) { // keep track of variance (deviation) of center
             if (dock_target_var.length() < _wv_thresh.get()) {
                 _flags.DOCK_STABLE = true;
+                if (_flags.ATTACH_BUTTON_PRESSED) {
+                    _flags.DOCKING_ENGAGED = true;
+                }
             }
         }
 
@@ -220,8 +238,6 @@ void ModeLoiterAssisted::find_dock_target(){
         _filt_dock_normal_NEU = _dock_norm_filter.apply(dock_normal_vec);
 
     }
-    // _filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/100.0f;
-    _filt_heading_cmd_deg = atan2f(dock_normal_vec.y,dock_normal_vec.x);
 }
 
 // void ModeLoiterAssisted::set_dock_target_state(DockTargetLockState new_state){
@@ -288,9 +304,11 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
     case Event::RUN_FLIGHT_CODE:
         // Flight Code
         // xy controller... TODO Change to velocity control!
+        // filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/100.0f;
+        float filt_heading_cmd_deg = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x);
         Vector2f target_xy_body_vel_cms = get_pilot_desired_velocity_xy(_vel_max_cms.get());
         Vector2f target_xy_NEU_vel_cms = target_xy_body_vel_cms;
-        target_xy_NEU_vel_cms.rotate(_filt_heading_cmd_deg * DEG_TO_RAD);
+        target_xy_NEU_vel_cms.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
         Vector2f target_xy_NEU_cm = pos_control->get_pos_target_cm().tofloat().xy() + target_xy_NEU_vel_cms*G_Dt;
         Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NEU_cm;
         float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
@@ -304,7 +322,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         // Yaw controller
         AC_AttitudeControl::HeadingCommand heading_cmd;
         heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
-        heading_cmd.yaw_angle_cd = _filt_heading_cmd_deg*100.0f;
+        heading_cmd.yaw_angle_cd = filt_heading_cmd_deg*100.0f;
         heading_cmd.yaw_rate_cds = 0.0;
 
         // z controller
@@ -341,6 +359,9 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         gcs().send_named_float("attach", 1.0f);
         _crash_check_enabled = true;
         status = Status::HANDLED_STATUS;
+        float heading_rad = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x);
+        _locked_heading_deg = heading_rad*RAD_TO_DEG;
+        _locked_vel_NE_cms = Vector2f(cosf(heading_rad),sinf(heading_rad))*_dock_speed_cms;
         break;
     case Event::EXIT_SIG: // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         status = Status::HANDLED_STATUS;
@@ -351,16 +372,17 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         break;
     case Event::RUN_FLIGHT_CODE:
         // Flight Code
-        pos_control->input_pos_vel_accel_xy(_xy_vel_cms, _xy_accel);
-        // // pos_control->input_vel_accel_z(_z_vel, _z_accel);
-        // pos_control->set_vel_desired_xy_cms(_xy_vel_cms);
-        // // pos_control->set_accel_desired_xy_cmss(_xy_accel);
-        // pos_control->set_vel_desired_z_cms(_z_vel);
-        filt_heading_cmd_deg = wrap_180(_bearing_cd/100.0f);
-        // integrate current pos to new target pos
-        Vector2f target_xy_NEU_cm = pos_control->get_pos_target_cm().tofloat().xy() + _xy_vel_cms*dt;
-        pos_control->set_pos_target_xy_cm(target_xy_NEU_cm.x, target_xy_NEU_cm.y);
+        AC_AttitudeControl::HeadingCommand heading_cmd;
+        heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
+        heading_cmd.yaw_angle_cd = _locked_heading_deg*100.0f;
+        heading_cmd.yaw_rate_cds = 0.0;
 
+        pos_control->set_vel_desired_xy_cms(_locked_vel_NE_cms);
+        pos_control->set_pos_target_z_from_climb_rate_cm(0.0f); // no climb rate
+
+        pos_control->update_xy_controller();
+        pos_control->update_z_controller();
+        attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
         break;
     default:
         fprintf(stderr, "I am in hell");
