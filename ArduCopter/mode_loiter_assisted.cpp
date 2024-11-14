@@ -423,7 +423,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         heading_cmd.yaw_angle_cd = _locked_heading_deg*100.0f;
         heading_cmd.yaw_rate_cds = 0.0;
 
-        pos_control->set_vel_desired_xy_cms(_locked_vel_NE_cms);
+        pos_control->input_vel_accel_xy(_locked_vel_NE_cms, Vector2f(0,0));
         pos_control->set_pos_target_z_from_climb_rate_cm(0.0f); // no climb rate
 
         pos_control->update_xy_controller();
