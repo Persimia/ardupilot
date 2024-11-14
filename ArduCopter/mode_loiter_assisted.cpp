@@ -142,6 +142,11 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
 // should be called at 100hz or more
 void ModeLoiterAssisted::run()
 {
+    #if AP_DDS_ENABLED
+        if (AP_DDS_Client::attached_state != _flags.ATTACHED) {
+            set_attached_status(static_cast<float>(AP_DDS_Client::attached_state));
+        }  
+    #endif
     // find our current position
     if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m)) {
         GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"No pos estimate!");
@@ -350,8 +355,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
         // xy controller... TODO Change to velocity control!
-        // filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/100.0f;
-        float filt_heading_cmd_deg = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x)*RAD_TO_DEG;
+        float filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/100.0f;
+        // float filt_heading_cmd_deg = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x)*RAD_TO_DEG;
         Vector2f target_xy_body_vel_cms = get_pilot_desired_velocity_xy(_vel_max_cms.get());
         Vector2f target_xy_NEU_vel_cms = target_xy_body_vel_cms;
         target_xy_NEU_vel_cms.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
@@ -405,7 +410,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         gcs().send_named_float("attach", 1.0f);
         _crash_check_enabled = true;
         status = Status::HANDLED_STATUS;
-        float heading_rad = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x);
+        float heading_rad = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/100.0f*DEG_TO_RAD;
+        // float heading_rad = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x);
         _locked_heading_deg = heading_rad*RAD_TO_DEG;
         _locked_vel_NE_cms = Vector2f(cosf(heading_rad),sinf(heading_rad))*_dock_speed_cms;
         break;}
@@ -597,14 +603,6 @@ void ModeLoiterAssisted::detach() { // init detach engaged via RC_Channel
 void ModeLoiterAssisted::set_attached_status(float att_st) { // start being attached
     _flags.ATTACHED = (abs(att_st) > 0.01);
     GCS_SEND_TEXT(MAV_SEVERITY_INFO,"Attached Status: %d\n", _flags.ATTACHED);
-    // if (_docking_state == DockingState::ATTACHED) {
-    //     return true;
-    // }   
-
-    // _docking_state = DockingState::ATTACHED;
-    // _attached = true;
-    // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Attached!");
-    // return true;
 }
 
 

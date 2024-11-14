@@ -1396,15 +1396,15 @@ private:
 
     enum class StateName : uint8_t {
         Default = 0,
-        Lass,
-        LeadUp,
-        CoastIn,
-        WindDown,
-        Vegetable,
-        WindUp,
-        CoastOut,
-        Recover,
-        Abort
+        Lass, // 1
+        LeadUp, // 2
+        CoastIn, // 3
+        WindDown, // 4
+        Vegetable, // 5
+        WindUp, // 6
+        CoastOut, // 7
+        Recover, // 8
+        Abort // 9
     };
 
 
@@ -1526,9 +1526,6 @@ private:
             
     };
     YawBuffer _yaw_buf;
-
-    bool _attached{false};
-
 };
 
 
