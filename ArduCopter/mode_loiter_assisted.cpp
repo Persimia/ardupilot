@@ -20,6 +20,8 @@
 #define DOCK_SPEED_CMS_DEFAULT               10.0
 #define UNDOCK_SPEED_CMS_DEFAULT             50.0
 
+#define LAND_DETECTOR_ACCEL_MAX            1.0f    // vehicle acceleration must be under 1m/s/s
+
 const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Param: VEL_MAX
     // @DisplayName: Max velocity commandable by sticks cm/s
@@ -99,7 +101,7 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Description: Coast in distance in cm
     // @Units: cm
     // @User: Advanced
-    AP_GROUPINFO("CID_CM", 11, ModeLoiterAssisted, _coast_in_dist, 20),
+    AP_GROUPINFO("CID_CM", 11, ModeLoiterAssisted, _coast_in_dist, 100),
     AP_GROUPEND
 };
 
@@ -130,7 +132,7 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     InitFilters();
 
     // Set State (assuming not attached for now)
-    TRAN(ModeLoiterAssisted::Default);
+    TRAN(&ModeLoiterAssisted::Default);
     (this->*_lass_state)(Event::ENTRY_SIG); // perform entry actions
 
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Mode set to Loiter Assisted");
@@ -155,19 +157,58 @@ void ModeLoiterAssisted::run()
     // evaluate distance flags
     evaluateDistFlags();
 
+    // evaluate rate flags
+    evaluateRateFlags();
+
     // evaluate transitions
     evaluate_transitions();
 
     // run flight code for current state
     (this->*_lass_state)(Event::RUN_FLIGHT_CODE);
 
+    // log everything of interest
+    logLass();
 }
 
-void ModeLoiterAssisted::evaluateDistFlags() {
+void ModeLoiterAssisted::logLass() { 
+    // convert flags to bitmask
+    uint8_t flags_bitmask = 0;
+    flags_bitmask |= (_flags.DOCK_FOUND           ? 1 : 0) << 0;
+    flags_bitmask |= (_flags.DOCKING_ENGAGED      ? 1 : 0) << 1;
+    flags_bitmask |= (_flags.DOCK_STABLE          ? 1 : 0) << 2;
+    flags_bitmask |= (_flags.AT_COAST_IN_DIST     ? 1 : 0) << 3;
+    flags_bitmask |= (_flags.ATTACHED             ? 1 : 0) << 4;
+    flags_bitmask |= (_flags.WINDED_DOWN          ? 1 : 0) << 5;
+    flags_bitmask |= (_flags.ATTACH_BUTTON_PRESSED ? 1 : 0) << 6;
+    
+    if (millis()-_last_log_time > _log_period_ms) {
+        AP::logger().Write(
+        "LASS", // heading name
+        "TimeUS,dockX,dockY,state,flags", // field labels
+        "smm--", // units
+        "F00--", // mults
+        "QffBB", // format
+        AP_HAL::micros64(),
+        _filt_dock_xyz_NEU_m.x,
+        _filt_dock_xyz_NEU_m.y,
+        uint8_t(_lass_state_name),
+        flags_bitmask
+        );
+        _last_log_time = millis();
+    }
+}
+
+void ModeLoiterAssisted::evaluateDistFlags() { // ALL FLAGS MUST BE SET TO FALSE INITIALLY!
     _flags.AT_COAST_IN_DIST = false;
     if (!_flags.DOCK_FOUND) { return;}
     _dist_to_dock_cm = (_filt_dock_xyz_NEU_m.xy()-_cur_pos_NED_m.xy()).length()*100.0f;
     if (_dist_to_dock_cm < _coast_in_dist) {_flags.AT_COAST_IN_DIST = true;}
+}
+
+void ModeLoiterAssisted::evaluateRateFlags() { // ALL FLAGS MUST BE SET TO FALSE INITIALLY!
+    _flags.WINDED_DOWN = false;
+    bool accel_stationary = (copter.land_accel_ef_filter.get().length() <= LAND_DETECTOR_ACCEL_MAX);
+    if (accel_stationary) {_flags.WINDED_DOWN = true;}
 }
 
 void ModeLoiterAssisted::AbortExit() {
@@ -236,7 +277,6 @@ void ModeLoiterAssisted::find_dock_target(){
 
         // Filter and evaluate dock normal vector
         _filt_dock_normal_NEU = _dock_norm_filter.apply(dock_normal_vec);
-
     }
 }
 
@@ -250,35 +290,41 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Default(const Event e) {
     Status status;
     // Transitions
     switch (e) {
-    case Event::ENTRY_SIG:
+    case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Default;
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Default state");
         _crash_check_enabled = true;
         status = Status::HANDLED_STATUS;
-        break;
-    case Event::EXIT_SIG: // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         status = Status::HANDLED_STATUS;
-        break;
-    case Event::EVALUATE_TRANSITIONS:
-        if (_flags.DOCK_FOUND) {status = TRAN(ModeLoiterAssisted::Lass);}
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.DOCK_FOUND) {status = TRAN(&ModeLoiterAssisted::Lass);}
         else {status = Status::HANDLED_STATUS;}
-        break;
-    case Event::RUN_FLIGHT_CODE:
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
         // Flight Code
-        loiter_nav->update();
-        float target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->norm_input_dz());
-        attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false); // call attitude controller
-        float target_climb_rate = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
+        float target_roll, target_pitch;
+        float target_yaw_rate = 0.0f;
+        float target_climb_rate = 0.0f;
+        pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
+        get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
+        loiter_nav->set_pilot_desired_acceleration(target_roll, target_pitch);
+        target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->norm_input_dz());
+        target_climb_rate = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
         target_climb_rate = constrain_float(target_climb_rate, -get_pilot_speed_dn(), g.pilot_speed_up);
+        loiter_nav->update();
+        attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false); // call attitude controller
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate); // get avoidance adjusted climb rate
         pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate); // Send the commanded climb rate to the position controller
         pos_control->update_z_controller();
         status = Status::HANDLED_STATUS;
-        break;
-    default:
+        break;}
+    default:{
         fprintf(stderr, "I am in hell");
         status = Status::HANDLED_STATUS;
-        break;
+        break;}
     }
     return status;
 }
@@ -287,25 +333,25 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
     Status status;
     // Transitions
     switch (e) {
-    case Event::ENTRY_SIG:
+    case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Lass;
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Lass state");
         _crash_check_enabled = true;
         status = Status::HANDLED_STATUS;
-        break;
-    case Event::EXIT_SIG: // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         status = Status::HANDLED_STATUS;
-        break;
-    case Event::EVALUATE_TRANSITIONS:
-        if (!_flags.DOCK_FOUND) {status = TRAN(ModeLoiterAssisted::Default);}
-        else if (_flags.DOCKING_ENGAGED) {status = TRAN(ModeLoiterAssisted::LeadUp);}
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (!_flags.DOCK_FOUND) {status = TRAN(&ModeLoiterAssisted::Default);}
+        else if (_flags.DOCKING_ENGAGED) {status = TRAN(&ModeLoiterAssisted::LeadUp);}
         else {status = Status::HANDLED_STATUS;}
-        break;
-    case Event::RUN_FLIGHT_CODE:
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
         // Flight Code
         // xy controller... TODO Change to velocity control!
         // filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/100.0f;
-        float filt_heading_cmd_deg = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x);
+        float filt_heading_cmd_deg = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x)*RAD_TO_DEG;
         Vector2f target_xy_body_vel_cms = get_pilot_desired_velocity_xy(_vel_max_cms.get());
         Vector2f target_xy_NEU_vel_cms = target_xy_body_vel_cms;
         target_xy_NEU_vel_cms.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
@@ -336,11 +382,11 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         pos_control->update_z_controller();
         attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
         
-        break;
-    default:
+        break;}
+    default:{
         fprintf(stderr, "I am in hell");
         status = Status::HANDLED_STATUS;
-        break;
+        break;}
     }
     return status;
 }
@@ -349,7 +395,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
     Status status;
     // Transitions
     switch (e) {
-    case Event::ENTRY_SIG:
+    case Event::ENTRY_SIG:{
         _lass_state_name = StateName::LeadUp;
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering LeadUp state");
         #if AP_DDS_ENABLED
@@ -362,15 +408,15 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         float heading_rad = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x);
         _locked_heading_deg = heading_rad*RAD_TO_DEG;
         _locked_vel_NE_cms = Vector2f(cosf(heading_rad),sinf(heading_rad))*_dock_speed_cms;
-        break;
-    case Event::EXIT_SIG: // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         status = Status::HANDLED_STATUS;
-        break;
-    case Event::EVALUATE_TRANSITIONS:
-        if (_flags.AT_COAST_IN_DIST) {status = TRAN(ModeLoiterAssisted::CoastIn);}
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.AT_COAST_IN_DIST) {status = TRAN(&ModeLoiterAssisted::CoastIn);}
         else {status = Status::HANDLED_STATUS;}
-        break;
-    case Event::RUN_FLIGHT_CODE:
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
         // Flight Code
         AC_AttitudeControl::HeadingCommand heading_cmd;
         heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
@@ -383,11 +429,12 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         pos_control->update_xy_controller();
         pos_control->update_z_controller();
         attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
-        break;
-    default:
+        _coast_in_pitch_cd = pos_control->get_pitch_cd();
+        break;}
+    default:{
         fprintf(stderr, "I am in hell");
         status = Status::HANDLED_STATUS;
-        break;
+        break;}
     }
     return status;
 }
@@ -396,27 +443,29 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
     Status status;
     // Transitions
     switch (e) {
-    case Event::ENTRY_SIG:
+    case Event::ENTRY_SIG:{
         _lass_state_name = StateName::CoastIn;
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastIn state");
         _crash_check_enabled = false;
         status = Status::HANDLED_STATUS;
-        break;
-    case Event::EXIT_SIG: // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         status = Status::HANDLED_STATUS;
-        break;
-    case Event::EVALUATE_TRANSITIONS:
-        if (_flags.ATTACHED) {status = TRAN(ModeLoiterAssisted::WindDown);}
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
         else {status = Status::HANDLED_STATUS;}
-        break;
-    case Event::RUN_FLIGHT_CODE:
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
         // Flight Code
-        
-        break;
-    default:
+        pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
+        pos_control->update_z_controller();
+        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0, _coast_in_pitch_cd, 0);
+        break;}
+    default:{
         fprintf(stderr, "I am in hell");
         status = Status::HANDLED_STATUS;
-        break;
+        break;}
     }
     return status;
 }
@@ -425,27 +474,30 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
     Status status;
     // Transitions
     switch (e) {
-    case Event::ENTRY_SIG:
+    case Event::ENTRY_SIG:{
         _lass_state_name = StateName::WindDown;
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindDown state");
         _crash_check_enabled = false;
+        _wind_down_throttle = attitude_control->get_throttle_in();
         status = Status::HANDLED_STATUS;
-        break;
-    case Event::EXIT_SIG: // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         status = Status::HANDLED_STATUS;
-        break;
-    case Event::EVALUATE_TRANSITIONS:
-        if (_flags.WINDED_DOWN) {status = TRAN(ModeLoiterAssisted::Vegetable);}
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.WINDED_DOWN) {status = TRAN(&ModeLoiterAssisted::Vegetable);}
         else {status = Status::HANDLED_STATUS;}
-        break;
-    case Event::RUN_FLIGHT_CODE:
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
         // Flight Code
-        
-        break;
-    default:
+        attitude_control->input_euler_rate_roll_pitch_yaw(0, 0, 0);
+        attitude_control->set_throttle_out(_wind_down_throttle, true, g.throttle_filt);
+        _wind_down_throttle*=_wind_down_decay_rate;
+        break;}
+    default:{
         fprintf(stderr, "I am in hell");
         status = Status::HANDLED_STATUS;
-        break;
+        break;}
     }
     return status;
 }
@@ -454,27 +506,28 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
     Status status;
     // Transitions
     switch (e) {
-    case Event::ENTRY_SIG:
+    case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Vegetable;
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Vegetable state");
         _crash_check_enabled = false;
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::SHUT_DOWN);
         status = Status::HANDLED_STATUS;
-        break;
-    case Event::EXIT_SIG: // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         status = Status::HANDLED_STATUS;
-        break;
-    case Event::EVALUATE_TRANSITIONS:
-        // if (_flags.WINDED_DOWN) {status = TRAN(ModeLoiterAssisted::Vegetable);}
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        // if (_flags.WINDED_DOWN) {status = TRAN(&ModeLoiterAssisted::Vegetable);}
         // else {status = Status::HANDLED_STATUS;}
-        break;
-    case Event::RUN_FLIGHT_CODE:
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
         // Flight Code
         
-        break;
-    default:
+        break;}
+    default:{
         fprintf(stderr, "I am in hell");
         status = Status::HANDLED_STATUS;
-        break;
+        break;}
     }
     return status;
 }

@@ -1424,10 +1424,16 @@ private:
     void InitFilters();
     void UpdateFilters();
     void evaluateDistFlags();
+    void evaluateRateFlags();
+    void logLass();
     Vector2f _filt_dock_normal_NEU;
     float _locked_heading_deg;
     Vector2f _locked_vel_NE_cms;
     float _dist_to_dock_cm;
+    float _coast_in_pitch_cd;
+    float _wind_down_throttle;
+    float _wind_down_decay_rate = .9;
+    uint32_t _log_period_ms = 100;
 
     float _dock_variance;
     float _distance_target_cm;

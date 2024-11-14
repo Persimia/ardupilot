@@ -25,7 +25,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Values: -90, -5
     // @Units: deg  
     // @User: Advanced
-    AP_GROUPINFO("_ANGMIN", 2, AP_Proximity_CurveFit, _angle_min_deg, -30),
+    AP_GROUPINFO("_ANGMIN", 2, AP_Proximity_CurveFit, _angle_min_deg, -120),
     
     // @Param{Copter}: _ANGMAX
     // @DisplayName: Proximity Curvefit Maximum Angle
@@ -33,7 +33,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Values: 5, 90
     // @Units: deg
     // @User: Advanced
-    AP_GROUPINFO("_ANGMAX", 3, AP_Proximity_CurveFit, _angle_max_deg, 30),
+    AP_GROUPINFO("_ANGMAX", 3, AP_Proximity_CurveFit, _angle_max_deg, 120),
 
     // @Param{Copter}: _RNGMIN
     // @DisplayName: Proximity Curvefit Minimum Range
@@ -49,7 +49,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Values: 0.5, 50
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_RNGMAX", 5, AP_Proximity_CurveFit, _rng_max_m, 3),
+    AP_GROUPINFO("_RNGMAX", 5, AP_Proximity_CurveFit, _rng_max_m, 50),
 
     // // @Param{Copter}: _LDR_HZ
     // // @DisplayName: Lidar sweep rate in Hz
