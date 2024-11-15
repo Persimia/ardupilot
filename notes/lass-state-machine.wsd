@@ -36,7 +36,7 @@ relax the controllers to smoothly settle
 }
 
 
-state AttachedVegetable: \
+state Vegetable: \
 disable crash checks \n\
 disable mode changes 
 
@@ -61,24 +61,22 @@ abort state to escape blade
 
 ' Transitions
 [*] --> Default
-Lass --> Default : !DOCK_FOUND
 Default --> Lass : DOCK_FOUND
 Default --> WindDown : ATTACHED
-Lass --> WindDown : ATTACHED
-LeadUp --> WindDown : ATTACHED
-' [*] --> AttachedVegetable : attached
+Lass --> Default : !DOCK_FOUND
 Lass --> LeadUp : DOCKING_ENGAGED
+Lass --> WindDown : ATTACHED
 LeadUp --> CoastIn : AT_COAST_IN_DIST
-' CoastIn --> Abort : timeout
+LeadUp --> WindDown : ATTACHED
+LeadUp --> Lass : !ATTACH_BUTTON_PRESSED
 CoastIn --> WindDown : ATTACHED
-WindDown --> AttachedVegetable : WINDED_DOWN
-WindDown --> Abort : FALLING
-AttachedVegetable --> WindUp : !ATTACH_BUTTON_PRESSED
+' CoastIn --> Abort : FALLING
+WindDown --> Vegetable : WINDED_DOWN
+' WindDown --> Abort : FALLING
+Vegetable --> WindUp : !ATTACH_BUTTON_PRESSED
 WindUp --> CoastOut : STABLE_AT_WIND_UP_PITCH
 CoastOut --> Recover : !AT_COAST_IN_DIST
 Recover --> Lass : AT_RECOVERY_POSITION
-
-
 }
 
 [*] --> run : update_flight_mode()
