@@ -1310,6 +1310,7 @@ public:
     bool has_user_takeoff(bool must_navigate) const override { return true; }
     bool allows_autotune() const override { return true; }
     bool crash_check_enabled() const override { return _crash_check_enabled; }
+    bool is_taking_off() const override { return _is_taking_off; };
 
     void attach();
     void detach();
@@ -1339,6 +1340,7 @@ private:
     AP_Float _undock_speed_cms;
     AP_Float _lidar_sweep_rate_hz;
     AP_Float _coast_in_dist;
+    AP_Float _wind_up_pitch_deg;
 
     // // Dock target states
     // enum class DockTargetLockState : uint8_t {
@@ -1365,10 +1367,14 @@ private:
         bool DOCK_FOUND = false;   // Default is false, can be set to true as needed
         bool DOCKING_ENGAGED = false;
         bool DOCK_STABLE = false;
-        bool AT_COAST_IN_DIST = false;
+        bool WITHIN_COAST_IN_DIST = false;
         bool ATTACHED = false;
-        bool WINDED_DOWN = false;
+        bool ACCEL_STATIONARY = false;
         bool ATTACH_BUTTON_PRESSED = false;
+        bool STABLE_AT_WIND_UP_PITCH = false;
+        bool AT_RECOVERY_POSITION = false;
+        bool BEYOND_COAST_OUT_DIST = false;
+        bool THROTTLE_WOUND_DOWN = false;
     };
     Flags _flags;
     enum class Status : uint8_t { 
@@ -1426,14 +1432,21 @@ private:
     void evaluateDistFlags();
     void evaluateRateFlags();
     void logLass();
+    void sendFlagFeedback();
     Vector2f _filt_dock_normal_NEU;
     float _locked_heading_deg;
     Vector2f _locked_vel_NE_cms;
     float _dist_to_dock_cm;
     float _coast_in_pitch_cd;
-    float _wind_down_throttle;
-    float _wind_down_decay_rate = .9;
+    float _wind_down_throttle_start;
+    float _wind_down_decay_time_s = 3; // seconds from current throttle to zero in linear decay
+    uint32_t _wind_down_start_ms; // start of wind down maneuver
     uint32_t _log_period_ms = 100;
+    Vector3f _recovery_position_NED_m; // Position where leadup state was entered 
+    uint32_t _last_send_windup;
+    Vector3f _docked_position_NED_m;
+    bool _is_taking_off{false};
+    
 
     float _dock_variance;
     float _distance_target_cm;

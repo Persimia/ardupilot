@@ -63,6 +63,9 @@ abort state to escape blade
 [*] --> Default
 Lass --> Default : !DOCK_FOUND
 Default --> Lass : DOCK_FOUND
+Default --> WindDown : ATTACHED
+Lass --> WindDown : ATTACHED
+LeadUp --> WindDown : ATTACHED
 ' [*] --> AttachedVegetable : attached
 Lass --> LeadUp : DOCKING_ENGAGED
 LeadUp --> CoastIn : AT_COAST_IN_DIST
@@ -70,10 +73,10 @@ LeadUp --> CoastIn : AT_COAST_IN_DIST
 CoastIn --> WindDown : ATTACHED
 WindDown --> AttachedVegetable : WINDED_DOWN
 WindDown --> Abort : FALLING
-AttachedVegetable --> WindUp : detach_engage
-WindUp --> CoastOut : at_attitude
-CoastOut --> Recover : at_coast_dist
-Recover --> Lass : at_safe_dist
+AttachedVegetable --> WindUp : !ATTACH_BUTTON_PRESSED
+WindUp --> CoastOut : STABLE_AT_WIND_UP_PITCH
+CoastOut --> Recover : !AT_COAST_IN_DIST
+Recover --> Lass : AT_RECOVERY_POSITION
 
 
 }

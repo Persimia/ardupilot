@@ -21,6 +21,12 @@
 #define UNDOCK_SPEED_CMS_DEFAULT             50.0
 
 #define LAND_DETECTOR_ACCEL_MAX            1.0f    // vehicle acceleration must be under 1m/s/s
+#define WIND_UP_PITCH_TOL                  0.5f   
+#define LOWER_COAST_IN_PITCH_BOUND         -2.0f
+#define UPPER_COAST_IN_PITCH_BOUND         0.0f
+#define RECOVERY_DIST_THRESH_CM            50.0f
+#define COAST_OUT_DIST_CM                     20.0f
+
 
 const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Param: VEL_MAX
@@ -102,6 +108,14 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Units: cm
     // @User: Advanced
     AP_GROUPINFO("CID_CM", 11, ModeLoiterAssisted, _coast_in_dist, 100),
+
+    // @Param{Copter}: WUP_DEG
+    // @DisplayName: Pitch angle for wind up to target in degrees
+    // @Description: Pitch angle for wind up to target in degrees
+    // @Units: deg
+    // @User: Advanced
+    AP_GROUPINFO("WUP_DEG", 12, ModeLoiterAssisted, _wind_up_pitch_deg, 1),
+
     AP_GROUPEND
 };
 
@@ -165,26 +179,38 @@ void ModeLoiterAssisted::run()
     // evaluate rate flags
     evaluateRateFlags();
 
+    // send pilot feedback on flags
+    sendFlagFeedback();
     // evaluate transitions
     evaluate_transitions();
-
     // run flight code for current state
     (this->*_lass_state)(Event::RUN_FLIGHT_CODE);
-
     // log everything of interest
     logLass();
 }
 
+// This function interprets what the pilot is attempting, and returns feedback
+void ModeLoiterAssisted::sendFlagFeedback() { 
+    if (_flags.ATTACH_BUTTON_PRESSED) { // Pilot wants to engage docking mode
+        if (!_flags.DOCK_STABLE) {
+
+        }
+    }
+}
+
 void ModeLoiterAssisted::logLass() { 
     // convert flags to bitmask
-    uint8_t flags_bitmask = 0;
+    uint16_t flags_bitmask = 0;
     flags_bitmask |= (_flags.DOCK_FOUND           ? 1 : 0) << 0;
     flags_bitmask |= (_flags.DOCKING_ENGAGED      ? 1 : 0) << 1;
     flags_bitmask |= (_flags.DOCK_STABLE          ? 1 : 0) << 2;
-    flags_bitmask |= (_flags.AT_COAST_IN_DIST     ? 1 : 0) << 3;
+    flags_bitmask |= (_flags.WITHIN_COAST_IN_DIST     ? 1 : 0) << 3;
     flags_bitmask |= (_flags.ATTACHED             ? 1 : 0) << 4;
-    flags_bitmask |= (_flags.WINDED_DOWN          ? 1 : 0) << 5;
+    flags_bitmask |= (_flags.ACCEL_STATIONARY     ? 1 : 0) << 5;
     flags_bitmask |= (_flags.ATTACH_BUTTON_PRESSED ? 1 : 0) << 6;
+    flags_bitmask |= (_flags.STABLE_AT_WIND_UP_PITCH ? 1 : 0) << 7;
+    flags_bitmask |= (_flags.AT_RECOVERY_POSITION ? 1 : 0) << 8;
+    flags_bitmask |= (_flags.THROTTLE_WOUND_DOWN ? 1 : 0) << 9;
     
     if (millis()-_last_log_time > _log_period_ms) {
         AP::logger().Write(
@@ -192,7 +218,7 @@ void ModeLoiterAssisted::logLass() {
         "TimeUS,dockX,dockY,state,flags", // field labels
         "smm--", // units
         "F00--", // mults
-        "QffBB", // format
+        "QffBH", // format
         AP_HAL::micros64(),
         _filt_dock_xyz_NEU_m.x,
         _filt_dock_xyz_NEU_m.y,
@@ -204,16 +230,34 @@ void ModeLoiterAssisted::logLass() {
 }
 
 void ModeLoiterAssisted::evaluateDistFlags() { // ALL FLAGS MUST BE SET TO FALSE INITIALLY!
-    _flags.AT_COAST_IN_DIST = false;
+    _flags.WITHIN_COAST_IN_DIST = false;
+    _flags.AT_RECOVERY_POSITION = false;
+    _flags.BEYOND_COAST_OUT_DIST = false;
+    float dist_to_recovery_pos_cm = (_recovery_position_NED_m-_cur_pos_NED_m).length()*100.0f;
+    fprintf(stderr, "dist %.2f \n", dist_to_recovery_pos_cm);
+    if (dist_to_recovery_pos_cm < RECOVERY_DIST_THRESH_CM) {
+        _flags.AT_RECOVERY_POSITION = true;
+    }
+    float dist_from_docked_pos_cm = (_docked_position_NED_m.xy()-_cur_pos_NED_m.xy()).length()*100.0f;
+    if (dist_from_docked_pos_cm > COAST_OUT_DIST_CM) {
+        _flags.BEYOND_COAST_OUT_DIST = true;
+    }
     if (!_flags.DOCK_FOUND) { return;}
     _dist_to_dock_cm = (_filt_dock_xyz_NEU_m.xy()-_cur_pos_NED_m.xy()).length()*100.0f;
-    if (_dist_to_dock_cm < _coast_in_dist) {_flags.AT_COAST_IN_DIST = true;}
+    if (_dist_to_dock_cm < _coast_in_dist) {_flags.WITHIN_COAST_IN_DIST = true;}
+
+
 }
 
 void ModeLoiterAssisted::evaluateRateFlags() { // ALL FLAGS MUST BE SET TO FALSE INITIALLY!
-    _flags.WINDED_DOWN = false;
+    _flags.ACCEL_STATIONARY = false;
+    _flags.STABLE_AT_WIND_UP_PITCH = false;
     bool accel_stationary = (copter.land_accel_ef_filter.get().length() <= LAND_DETECTOR_ACCEL_MAX);
-    if (accel_stationary) {_flags.WINDED_DOWN = true;}
+    if (accel_stationary) {_flags.ACCEL_STATIONARY = true;}
+    bool at_wind_up_pitch = abs(ahrs.get_pitch()*RAD_TO_DEG - _wind_up_pitch_deg) < WIND_UP_PITCH_TOL;
+    if (accel_stationary && at_wind_up_pitch) {
+        _flags.STABLE_AT_WIND_UP_PITCH = true;
+    }
 }
 
 void ModeLoiterAssisted::AbortExit() {
@@ -277,6 +321,13 @@ void ModeLoiterAssisted::find_dock_target(){
                 if (_flags.ATTACH_BUTTON_PRESSED) {
                     _flags.DOCKING_ENGAGED = true;
                 }
+            } 
+            else {
+                _flags.DOCK_STABLE = false;
+                if (_flags.ATTACH_BUTTON_PRESSED) {
+                    _flags.DOCKING_ENGAGED = false;
+                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Variance: %.4fm >= %.4fm", dock_target_var.length(), _wv_thresh.get());
+                }
             }
         }
 
@@ -292,21 +343,23 @@ void ModeLoiterAssisted::find_dock_target(){
 /*---------------------------------------------------------------------------*/
 /* Finite State Machine States... */
 ModeLoiterAssisted::Status ModeLoiterAssisted::Default(const Event e) {
-    Status status;
+    Status status = Status::HANDLED_STATUS;
     // Transitions
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Default;
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Default state");
         _crash_check_enabled = true;
-        status = Status::HANDLED_STATUS;
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
-        status = Status::HANDLED_STATUS;
+        
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.DOCK_FOUND) {status = TRAN(&ModeLoiterAssisted::Lass);}
-        else {status = Status::HANDLED_STATUS;}
+        else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
@@ -324,33 +377,33 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Default(const Event e) {
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate); // get avoidance adjusted climb rate
         pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate); // Send the commanded climb rate to the position controller
         pos_control->update_z_controller();
-        status = Status::HANDLED_STATUS;
+        
         break;}
     default:{
         fprintf(stderr, "I am in hell");
-        status = Status::HANDLED_STATUS;
+        
         break;}
     }
     return status;
 }
 
 ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
-    Status status;
+    Status status = Status::HANDLED_STATUS;
     // Transitions
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Lass;
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Lass state");
         _crash_check_enabled = true;
-        status = Status::HANDLED_STATUS;
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
-        status = Status::HANDLED_STATUS;
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (!_flags.DOCK_FOUND) {status = TRAN(&ModeLoiterAssisted::Default);}
         else if (_flags.DOCKING_ENGAGED) {status = TRAN(&ModeLoiterAssisted::LeadUp);}
-        else {status = Status::HANDLED_STATUS;}
+        else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
@@ -386,18 +439,17 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         pos_control->update_xy_controller();
         pos_control->update_z_controller();
         attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
-        
         break;}
     default:{
         fprintf(stderr, "I am in hell");
-        status = Status::HANDLED_STATUS;
+        
         break;}
     }
     return status;
 }
 
 ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
-    Status status;
+    Status status = Status::HANDLED_STATUS;
     // Transitions
     switch (e) {
     case Event::ENTRY_SIG:{
@@ -409,18 +461,22 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         #endif
         gcs().send_named_float("attach", 1.0f);
         _crash_check_enabled = true;
-        status = Status::HANDLED_STATUS;
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        
         float heading_rad = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/100.0f*DEG_TO_RAD;
         // float heading_rad = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x);
         _locked_heading_deg = heading_rad*RAD_TO_DEG;
         _locked_vel_NE_cms = Vector2f(cosf(heading_rad),sinf(heading_rad))*_dock_speed_cms;
+        _recovery_position_NED_m = _cur_pos_NED_m;
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
-        status = Status::HANDLED_STATUS;
+        
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.AT_COAST_IN_DIST) {status = TRAN(&ModeLoiterAssisted::CoastIn);}
-        else {status = Status::HANDLED_STATUS;}
+        if (_flags.WITHIN_COAST_IN_DIST) {status = TRAN(&ModeLoiterAssisted::CoastIn);}
+        else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else if (!_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::Recover);}
+        else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
@@ -436,31 +492,33 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         pos_control->update_z_controller();
         attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
         _coast_in_pitch_cd = pos_control->get_pitch_cd();
+        _coast_in_pitch_cd = constrain_float(_coast_in_pitch_cd, LOWER_COAST_IN_PITCH_BOUND, UPPER_COAST_IN_PITCH_BOUND); // constrain
         break;}
     default:{
         fprintf(stderr, "I am in hell");
-        status = Status::HANDLED_STATUS;
+        
         break;}
     }
     return status;
 }
 
 ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
-    Status status;
+    Status status = Status::HANDLED_STATUS;
     // Transitions
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::CoastIn;
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastIn state");
         _crash_check_enabled = false;
-        status = Status::HANDLED_STATUS;
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
-        status = Status::HANDLED_STATUS;
+        
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
-        else {status = Status::HANDLED_STATUS;}
+        else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
@@ -470,46 +528,53 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
         break;}
     default:{
         fprintf(stderr, "I am in hell");
-        status = Status::HANDLED_STATUS;
+        
         break;}
     }
     return status;
 }
 
 ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
-    Status status;
+    Status status = Status::HANDLED_STATUS;
     // Transitions
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::WindDown;
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindDown state");
         _crash_check_enabled = false;
-        _wind_down_throttle = attitude_control->get_throttle_in();
-        status = Status::HANDLED_STATUS;
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        _wind_down_throttle_start = attitude_control->get_throttle_in();
+        _wind_down_start_ms = millis();
+        
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
-        status = Status::HANDLED_STATUS;
+        
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.WINDED_DOWN) {status = TRAN(&ModeLoiterAssisted::Vegetable);}
-        else {status = Status::HANDLED_STATUS;}
+        if (_flags.ACCEL_STATIONARY && _flags.THROTTLE_WOUND_DOWN) {status = TRAN(&ModeLoiterAssisted::Vegetable);} // are both necessary?
+        else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
         attitude_control->input_euler_rate_roll_pitch_yaw(0, 0, 0);
-        attitude_control->set_throttle_out(_wind_down_throttle, true, g.throttle_filt);
-        _wind_down_throttle*=_wind_down_decay_rate;
+        float wind_down_throttle = _wind_down_throttle_start * 
+            (1 - (float(millis() - _wind_down_start_ms)/_wind_down_decay_time_s));
+        wind_down_throttle = MAX(wind_down_throttle,0.0f);
+        attitude_control->set_throttle_out(wind_down_throttle, true, g.throttle_filt);
+        if (wind_down_throttle < 0.0001f) {
+            _flags.THROTTLE_WOUND_DOWN = true;
+        }
         break;}
     default:{
         fprintf(stderr, "I am in hell");
-        status = Status::HANDLED_STATUS;
+        
         break;}
     }
     return status;
 }
 
 ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
-    Status status;
+    Status status = Status::HANDLED_STATUS;
     // Transitions
     switch (e) {
     case Event::ENTRY_SIG:{
@@ -517,14 +582,14 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Vegetable state");
         _crash_check_enabled = false;
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::SHUT_DOWN);
-        status = Status::HANDLED_STATUS;
+        _docked_position_NED_m = _cur_pos_NED_m;
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
-        status = Status::HANDLED_STATUS;
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        // if (_flags.WINDED_DOWN) {status = TRAN(&ModeLoiterAssisted::Vegetable);}
-        // else {status = Status::HANDLED_STATUS;}
+        if (!_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::WindUp);}
+        // TODO add falling check
+        // else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
@@ -532,7 +597,127 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
         break;}
     default:{
         fprintf(stderr, "I am in hell");
-        status = Status::HANDLED_STATUS;
+        
+        break;}
+    }
+    return status;
+}
+
+ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::WindUp;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindUp state");
+        _crash_check_enabled = false;
+        _is_taking_off = true;
+        set_land_complete(false);
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        if (abs(_wind_down_throttle_start-0.0f)<0.0001f) {
+            _wind_down_throttle_start = motors->get_throttle_hover(); // This could be problematic!
+        }
+        
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        _is_taking_off = false;
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.STABLE_AT_WIND_UP_PITCH) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
+        else {
+            float accel_mss = copter.land_accel_ef_filter.get().length();
+            float pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
+            if (millis()-_last_send_windup > 100) {
+                GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "accel m/s/s: %.2f pitch deg: %.2f", accel_mss, pitch_deg); // TODO remove or rate limit
+                _last_send_windup = millis();
+            }
+            
+        }
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        // float roll = ahrs.get_roll()*RAD_TO_DEG*100.0f; // if we are roll constrained, it might be useful to not push it to hard
+        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _wind_up_pitch_deg*100.0f, 0.0f);
+        attitude_control->set_throttle_out(_wind_down_throttle_start, true, g.throttle_filt); // monitor wind up?
+        break;}
+    default:{
+        fprintf(stderr, "I am in hell");
+        
+        break;}
+    }
+    return status;
+}
+
+ModeLoiterAssisted::Status ModeLoiterAssisted::CoastOut(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::CoastOut;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastOut state");
+        _crash_check_enabled = true;
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        #if AP_DDS_ENABLED
+        // AP_DDS publish detach message
+        AP_DDS_Client::need_to_pub_attach_detach = true;
+        AP_DDS_Client::desire_attach = false;
+        #endif
+        gcs().send_named_float("attach", 0.0f);
+        
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.BEYOND_COAST_OUT_DIST) {status = TRAN(&ModeLoiterAssisted::Recover);}
+        // else {}
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
+        pos_control->update_z_controller();
+        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0, -_wind_up_pitch_deg*100.0f, 0);
+        break;}
+    default:{
+        fprintf(stderr, "I am in hell");
+        
+        break;}
+    }
+    return status;
+}
+
+ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::Recover;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Recover state");
+        _crash_check_enabled = true;
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.AT_RECOVERY_POSITION) {status = TRAN(&ModeLoiterAssisted::Lass);}
+        // else {}
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        pos_control->set_pos_target_xy_cm(_recovery_position_NED_m.x*100.0f, _recovery_position_NED_m.y*100.0f);
+        pos_control->set_pos_target_z_cm(-_recovery_position_NED_m.z*100.0f);
+
+        // run position controllers
+        pos_control->update_xy_controller();
+        pos_control->update_z_controller();
+
+        // call attitude controller with auto yaw
+        attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), ahrs.get_yaw()*RAD_TO_DEG*100.0f);
+        break;}
+    default:{
+        fprintf(stderr, "I am in hell");
+        
         break;}
     }
     return status;
@@ -542,7 +727,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
 /*---------------------------------------------------------------------------*/
 /* Finite State Machine facilities... */
 void ModeLoiterAssisted::evaluate_transitions() {
-    Status status;
+    Status status = Status::HANDLED_STATUS;
     StateHandler prev_state = _lass_state; /* save for later */
 
     status = (this->*_lass_state)(Event::EVALUATE_TRANSITIONS);
@@ -561,43 +746,15 @@ void ModeLoiterAssisted::run_flight_code() {
 
 
 
+
 /*..........................................................................*/
 
 void ModeLoiterAssisted::attach() { // init attach engaged via RC_Channel
     _flags.ATTACH_BUTTON_PRESSED = true;
-    // if (_flags.ATTACH_BUTTON_PRESSED) {
-    //     return true;
-    // }
-    // if (!_ready_to_dock) {
-    //     GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Variance too high, not ready to dock");
-    //     return false;
-    // }
-
-    // _docking_state = DockingState::ATTACH_MANEUVER;
-    // _lock_commands = true;
-    // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Attach primed");
-    // return true;
 }
 
 void ModeLoiterAssisted::detach() { // init detach engaged via RC_Channel
     _flags.ATTACH_BUTTON_PRESSED = false;
-    // if (_docking_state == DockingState::DETACH_MANEUVER) {
-    //     return true;
-    // }
-    // if (_docking_state == DockingState::NOT_DOCKING) { // only detach when we are attaching or attached
-    //     return false;
-    // }
-    // #if AP_DDS_ENABLED
-    // // AP_DDS publish detach message
-    // AP_DDS_Client::need_to_pub_attach_detach = true;
-    // AP_DDS_Client::desire_attach = false;
-    // #endif
-    // gcs().send_named_float("attach", 0.0f);
-
-
-    // _docking_state = DockingState::DETACH_MANEUVER;
-    // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Detach primed");
-    // return true;
 }
 
 void ModeLoiterAssisted::set_attached_status(float att_st) { // start being attached
