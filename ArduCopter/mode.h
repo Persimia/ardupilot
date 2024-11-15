@@ -1369,13 +1369,14 @@ private:
         bool DOCK_STABLE = false;
         bool WITHIN_COAST_IN_DIST = false;
         bool ATTACHED = false;
-        bool ACCEL_STATIONARY = false;
+        bool VEHICLE_STATIONARY = false;
         bool ATTACH_BUTTON_PRESSED = false;
         bool STABLE_AT_WIND_UP_PITCH = false;
         bool AT_RECOVERY_POSITION = false;
         bool BEYOND_COAST_OUT_DIST = false;
         bool THROTTLE_WOUND_DOWN = false;
-    };
+        bool AT_WIND_UP_PITCH = false;
+    }; // be sure to add new ones to log!
     Flags _flags;
     enum class Status : uint8_t { 
         TRAN_STATUS = 0, 
@@ -1433,6 +1434,11 @@ private:
     void evaluateRateFlags();
     void logLass();
     void sendFlagFeedback();
+    void set_attitude_control_rate_limits(float limit_degs);
+    void unset_attitude_control_rate_limits();
+    float _original_roll_limit;
+    float _original_pitch_limit;
+    float _original_yaw_limit;
     Vector2f _filt_dock_normal_NEU;
     float _locked_heading_deg;
     Vector2f _locked_vel_NE_cms;
@@ -1441,6 +1447,7 @@ private:
     float _wind_down_throttle_start;
     float _wind_down_decay_time_s = 3; // seconds from current throttle to zero in linear decay
     uint32_t _wind_down_start_ms; // start of wind down maneuver
+    uint32_t _wind_up_start_ms; // start of wind down maneuver
     uint32_t _log_period_ms = 100;
     Vector3f _recovery_position_NED_m; // Position where leadup state was entered 
     uint32_t _last_send_windup;
