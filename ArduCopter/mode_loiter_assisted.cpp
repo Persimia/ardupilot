@@ -25,7 +25,7 @@
 #define LOWER_COAST_IN_PITCH_BOUND         -2.0f
 #define UPPER_COAST_IN_PITCH_BOUND         0.0f
 #define RECOVERY_DIST_THRESH_CM            50.0f
-#define COAST_OUT_DIST_CM                     20.0f
+#define COAST_OUT_DIST_CM                  20.0f
 
 
 const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
@@ -245,7 +245,9 @@ void ModeLoiterAssisted::evaluateDistFlags() { // ALL FLAGS MUST BE SET TO FALSE
     }
     if (!_flags.DOCK_FOUND) { return;}
     _dist_to_dock_cm = (_filt_dock_xyz_NEU_m.xy()-_cur_pos_NED_m.xy()).length()*100.0f;
-    if (_dist_to_dock_cm < _coast_in_dist) {_flags.WITHIN_COAST_IN_DIST = true;}
+    if (_dist_to_dock_cm < _coast_in_dist) {
+        _flags.WITHIN_COAST_IN_DIST = true;
+    }
 
 
 }
@@ -253,15 +255,20 @@ void ModeLoiterAssisted::evaluateDistFlags() { // ALL FLAGS MUST BE SET TO FALSE
 void ModeLoiterAssisted::evaluateRateFlags() { // ALL FLAGS MUST BE SET TO FALSE INITIALLY!
     _flags.VEHICLE_STATIONARY = false;
     _flags.STABLE_AT_WIND_UP_PITCH = false;
+    _flags.AT_WIND_UP_PITCH = false;
     // fprintf(stderr, "Accel: %.4f\n", copter.land_accel_ef_filter.get().length());
     // (copter.land_accel_ef_filter.get().length() <= STATIONARY_ACCEL);
     Vector3f velocity_NED_m;
     if (!ahrs.get_velocity_NED(velocity_NED_m)){}
     bool vel_zero = (velocity_NED_m.length() <= STATIONARY_VEL);
     fprintf(stderr, "Vel: %.4f, %.4f, %.4f\n", velocity_NED_m.x, velocity_NED_m.y, velocity_NED_m.z);
-    if (vel_zero) {_flags.VEHICLE_STATIONARY = true;}
+    if (vel_zero) {
+        _flags.VEHICLE_STATIONARY = true;
+    }
     bool at_wind_up_pitch = abs(ahrs.get_pitch()*RAD_TO_DEG - _wind_up_pitch_deg) < WIND_UP_PITCH_TOL;
+    
     _flags.AT_WIND_UP_PITCH = at_wind_up_pitch;
+
     if (vel_zero && at_wind_up_pitch) {
         _flags.STABLE_AT_WIND_UP_PITCH = true;
     }
@@ -357,8 +364,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Default(const Event e) {
         _lass_state_name = StateName::Default;
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Default state");
         _crash_check_enabled = true;
-        
-        
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         
@@ -776,6 +781,7 @@ void ModeLoiterAssisted::evaluate_transitions() {
         (this->*_lass_state)(Event::ENTRY_SIG);
     }
 }
+
 void ModeLoiterAssisted::run_flight_code() {
     Status status = (this->*_lass_state)(Event::RUN_FLIGHT_CODE);
     if (status == Status::TRAN_STATUS) {
