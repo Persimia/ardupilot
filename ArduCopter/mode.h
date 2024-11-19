@@ -5,6 +5,7 @@
 #include <AP_ExternalControl/AP_ExternalControl_config.h> // TODO why is this needed if Copter.h includes this
 #include <deque>
 #include <vector>
+#include <AC_PID/AC_PID_Basic.h>
 
 class Parameters;
 class ParametersG2;
@@ -1323,35 +1324,25 @@ protected:
     const char *name() const override { return "LOITER_ASSISTED"; }
     const char *name4() const override { return "LASS"; }
 
-    uint32_t wp_distance() const override;
-    int32_t wp_bearing() const override;
-    float crosstrack_error() const override { return pos_control->crosstrack_error();}
-
 private:
     // Define parameters
-    AP_Float _vel_max_cms;
+    AP_Float _vel_max_cm_s;
     AP_Float _min_obs_dist_cm;
-    AP_Float _yaw_hz;
-    AP_Float _pos_filt_hz;
-    AP_Float _dist_filt_hz;
+    AP_Float _dock_pos_filt_hz;
     AP_Int32 _wv_window_size;
     AP_Float _wv_thresh;
-    AP_Float _dock_speed_cms;
-    AP_Float _undock_speed_cms;
-    AP_Float _lidar_sweep_rate_hz;
-    AP_Float _coast_in_dist;
+    AP_Float _dock_speed_cm_s;
+    AP_Float _undock_speed_cm_s;
+    AP_Float _coast_in_dist_cm;
     AP_Float _wind_up_pitch_deg;
-
-    // // Dock target states
-    // enum class DockTargetLockState : uint8_t {
-    //     NONE = 0,                   // state unset
-    //     NOT_FOUND,                  // no potential target detected
-    //     FOUND,                      // possible target, no convergence
-    //     FOUND_STABLE,               // dock target is found and converged
-    //     LOCKED                      // target locked
-    // };
-    // DockTargetLockState _docking_target_lock_state = DockTargetLockState::NONE;
-    // void set_dock_target_state(DockTargetLockState new_state);
+    AP_Float _thro_pitch_p;
+    AP_Float _thro_pitch_i;
+    AP_Float _thro_pitch_d;
+    AP_Float _thro_pitch_ff;
+    AP_Float _thro_pitch_imax;
+    AP_Float _thro_pitch_err_hz;
+    AP_Float _thro_pitch_d_hz;
+    AP_Float _stationary_vel_m_s;
 
     //====================================================================
     /*---------------------------------------------------------------------------*/
@@ -1365,28 +1356,29 @@ private:
     };
     struct Flags {
         bool DOCK_FOUND = false;   // Default is false, can be set to true as needed
-        bool DOCKING_ENGAGED = false;
         bool DOCK_STABLE = false;
         bool WITHIN_COAST_IN_DIST = false;
         bool ATTACHED = false;
         bool VEHICLE_STATIONARY = false;
         bool ATTACH_BUTTON_PRESSED = false;
-        bool STABLE_AT_WIND_UP_PITCH = false;
         bool AT_RECOVERY_POSITION = false;
         bool BEYOND_COAST_OUT_DIST = false;
         bool THROTTLE_WOUND_DOWN = false;
         bool AT_WIND_UP_PITCH = false;
+        bool HEADING_NORMAL_ALIGNED = false;
+        bool DETACH_BUTTON_PRESSED = false;
+        bool DOCK_COMMS_HEALTHY = false;
     }; // be sure to add new ones to log!
     Flags _flags;
     enum class Status : uint8_t { 
-        TRAN_STATUS = 0, 
+        INIT_STATUS = 0, 
+        TRAN_STATUS, 
         HANDLED_STATUS, 
-        IGNORED_STATUS, 
-        INIT_STATUS 
+        IGNORED_STATUS
     };
     typedef Status (ModeLoiterAssisted::*StateHandler)(const Event e);
     void evaluate_transitions();
-    void run_flight_code();
+    void runFlightCode();
     Flags evaluate_flags();
     /*---------------------------------------------------------------------------*/
     /* Finite State Machine States... */
@@ -1414,7 +1406,6 @@ private:
         Abort // 9
     };
 
-
     StateHandler _lass_state = &ModeLoiterAssisted::Default;
     StateName _lass_state_name = StateName::Default;
     /*---------------------------------------------------------------------------*/
@@ -1426,22 +1417,27 @@ private:
     /*---------------------------------------------------------------------------*/
     /* Dock target variables... */
     // float _filt_heading_cmd_deg;
-    void find_dock_target();
-    void AbortExit();
+    void findDockTarget();
+    void abortExit();
     void InitFilters();
-    void UpdateFilters();
-    void evaluateDistFlags();
-    void evaluateRateFlags();
+    void updateFilterParams();
+    void evaluateFlags();
     void logLass();
     void sendFlagFeedback();
     void set_attitude_control_rate_limits(float limit_degs);
     void unset_attitude_control_rate_limits();
+    void checkDockComms();
+    float _heading_normal_error_deg;
+    uint32_t _last_att_st_time;
+    Vector3f _velocity_NED_m;
+    uint32_t _last_send_lass;
+    float _dock_target_var;
     float _original_roll_limit;
     float _original_pitch_limit;
     float _original_yaw_limit;
     Vector2f _filt_dock_normal_NEU;
     float _locked_heading_deg;
-    Vector2f _locked_vel_NE_cms;
+    Vector2f _locked_vel_NE_cm_s;
     float _dist_to_dock_cm;
     float _coast_in_pitch_cd;
     float _wind_down_throttle_start;
@@ -1453,19 +1449,45 @@ private:
     uint32_t _last_send_windup;
     Vector3f _docked_position_NED_m;
     bool _is_taking_off{false};
+    struct lasmData {
+        uint32_t TimeUS = 0;
+        float tpX = AP::logger().quiet_nanf(); // cmded x position NEU m
+        float tpY = AP::logger().quiet_nanf(); // cmded y position NEU m
+        float tpZ = AP::logger().quiet_nanf(); // cmded z position NEU m
+        float tvX = AP::logger().quiet_nanf(); // cmded x velocity NEU m/s
+        float tvY = AP::logger().quiet_nanf(); // cmded y velocity NEU m/s
+        float tvZ = AP::logger().quiet_nanf(); // cmded z velocity NEU m/s
+        float rol = AP::logger().quiet_nanf(); // cmded roll deg 
+        float pit = AP::logger().quiet_nanf(); // cmded pitch deg
+        float hdg = AP::logger().quiet_nanf(); // cmded yaw deg
+        float thr = AP::logger().quiet_nanf(); // cmded throttle unitless
+        AP_Motors::DesiredSpoolState dss;
+        AP_Motors::SpoolState ss;
+    };
+    void logLasm(const lasmData &data);
+    AC_PID_Basic _thro_pitch_pid{
+        0.01f,  // initial P gain
+        0.01f, // initial I gain
+        0.0f, // initial D gain
+        0.0f,  // initial feed-forward (FF)
+        0.5f, // integrator max  is half throttle
+        400.0f, // error filter frequency in Hz
+        400.0f  // derivative filter frequency in Hz
+    }; // Initial gains: kP, kI, kD, and integrator max
     
 
     float _dock_variance;
     float _distance_target_cm;
     Vector2p _xy_pos; // xy pos in NEU cm
-    Vector2f _xy_vel_cms; // xy vel in NEU cm
+    Vector2f _xy_vel_cm_s; // xy vel in NEU cm
     const Vector2f _xy_accel{0,0};
     float _z_pos;
     float _z_vel{0};
     const float _z_accel{0};
     float _filt_yaw_cmd_deg;
     float _bearing_cd;
-    uint32_t _last_log_time;
+    uint32_t _last_lass_log_time;
+    uint32_t _last_lasm_log_time;
     Vector3f _cur_pos_NED_m;
     Vector3f _filt_dock_xyz_NEU_m;
     /*---------------------------------------------------------------------------*/

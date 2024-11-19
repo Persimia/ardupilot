@@ -55,8 +55,8 @@ use pos control to get to safe distance
 State Default: \
 go to normal loiter code when nothing detected
 
-State Abort: \
-abort state to escape blade
+' State Abort: \
+' abort state to escape blade
 
 
 ' Transitions
@@ -79,8 +79,14 @@ CoastOut --> Recover : BEYOND_COAST_OUT_DIST
 Recover --> Lass : AT_RECOVERY_POSITION
 }
 
+State AbortExit: \
+Leave lass state, try to return to \n\
+last state, otherwise stabilize
+ 
 [*] --> run : update_flight_mode()
-run --> [*] : !AltHoldModeState::Flying || lass_disengage
+run --> [*] : lass_disengage
+run --> AbortExit : No Pos Estimate
+AbortExit --> [*]
 }
 
 

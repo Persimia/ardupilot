@@ -81,25 +81,6 @@ bool AP_Proximity_CurveFit::get_target(Vector2f &normal_vec, Vector2f &center)
 
     if(!AP::ahrs().get_relative_position_NE_origin(curr_pos)){return false;} // No Position Estimate
     if(!compute_fit(curr_pos, _tangent_vec, _normal_vec, _center, _fit_quality, _fit_type, _fit_num)){return false;}// Unable to solve heading, distance
-    // // Vector from vehicle position to center of curvature;
-    // Vector2f r_pos_center = _center - curr_pos;
-    // switch (_fit_type)
-    // {
-    //     case AP_Proximity_CurveFit::CenterType::POINT:
-    //         FALLTHROUGH;
-    //     case AP_Proximity_CurveFit::CenterType::LINE:
-    //         distance = r_pos_center.length();
-    //         heading = wrap_PI(r_pos_center.angle());
-    //         tangent_vec = _tangent_vec;
-    //         normal_vec = _normal_vec;
-    //         center = _center;
-    //         break;
-    //     case AP_Proximity_CurveFit::CenterType::NONE:
-    //         FALLTHROUGH;
-    //     default:
-    //         return false;
-    // }
-    // log_target(heading, distance); //write to dataflash log
     normal_vec = _normal_vec;
     center = _center;
     return true;
@@ -125,7 +106,6 @@ bool AP_Proximity_CurveFit::compute_fit(Vector2f curr_pos,
             fit_type = AP_Proximity_CurveFit::CenterType::LINE;
             // Vector2f old_center = center;
             center = _center_filter.apply(center);
-            // fprintf(stderr, "Unfilt: %.4f, %.4f\t Filt: %.4f, %.4f\n",old_center.x, old_center.y, center.x, center.y);
             log_fit(center, normal_vec, fit_quality, fit_num);
             return true;
         }
@@ -136,7 +116,6 @@ bool AP_Proximity_CurveFit::compute_fit(Vector2f curr_pos,
         fit_type = AP_Proximity_CurveFit::CenterType::POINT;
         // Vector2f old_center = center;
         center = _center_filter.apply(center);
-        // fprintf(stderr, "Unfilt: %.4f, %.4f\t Filt: %.4f, %.4f\n",old_center.x, old_center.y, center.x, center.y);
         log_fit(center, normal_vec, fit_quality, fit_num);
         return true;
     }
@@ -217,6 +196,12 @@ bool AP_Proximity_CurveFit::solve_line(AP_Proximity_CurveFit::Coefficients c, Ve
     // Center point is the mean of the x and y values
     center.x = mean_x;
     center.y = mean_y;
+
+    // Ensure the normal vector points toward curr_pos
+    Vector2f center_to_curr = curr_pos - center;
+    if (normal_vec.dot(center_to_curr) < 0) {
+        normal_vec = -normal_vec; // Invert the normal vector
+    }
 
     // Calculate fit quality as the ratio of variances along the principal axis
     float total_variance = cov_xx + cov_yy;
