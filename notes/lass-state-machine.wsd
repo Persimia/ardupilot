@@ -88,7 +88,7 @@ CoastIn -[#red]-> WindDown : ATTACHED
 ' CoastIn -[#black]-> Abort : FALLING
 WindDown -[#green]-> Vegetable : WINDED_DOWN
 ' WindDown -[#black]-> Abort : FALLING
-Vegetable -[#black]-> WindUp : !ATTACH_BUTTON_PRESSED
+Vegetable -[#black]-> WindUp : DETACH_BUTTON_PRESSED
 WindUp -[#red]-> CoastOut : STABLE_AT_WIND_UP_PITCH
 WindUp -[#red]-> WindDown : ATTACH_BUTTON_PRESSED
 CoastOut -[#green]-> Recover : BEYOND_COAST_OUT_DIST

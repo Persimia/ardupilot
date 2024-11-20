@@ -300,12 +300,12 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
                     _last_send_lass = millis();
                 }
                 if (!_flags.VEHICLE_STATIONARY) {
-                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Vel: (%.4f, %.4f, %.4f). Len: %.4f > %.4f\n", 
+                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Vel: (%.4f, %.4f, %.4f). Len: %.4f > %.4f", 
                         _velocity_NED_m.x, _velocity_NED_m.y, _velocity_NED_m.z, _velocity_NED_m.length(), _stationary_vel_m_s.get());
                     _last_send_lass = millis();
                 }
                 if (!_flags.HEADING_NORMAL_ALIGNED) {
-                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Heading-normal error: %.4f >= %.4f\n", 
+                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Heading-normal error: %.4f >= %.4f", 
                         _heading_normal_error_deg, HEADING_NORMAL_TOL_DEG);
                     _last_send_lass = millis();
                 }
