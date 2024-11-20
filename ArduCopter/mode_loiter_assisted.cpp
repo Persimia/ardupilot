@@ -14,10 +14,10 @@
 #define WV_THRESH_DEFAULT                    0.1f 
 #define DOCK_SPEED_CM_S_DEFAULT              10.0f
 #define UNDOCK_SPEED_CM_S_DEFAULT            50.0f
-#define CID_CM_DEFAULT                       100.0f
+#define CID_CM_DEFAULT                       30.0f // coast in distance
 #define WUP_DEG_DEFAULT                      5.0f
 #define DEFAULT_THRO_PITCH_P_GAIN            0.0f  // initial P gain
-#define DEFAULT_THRO_PITCH_I_GAIN            0.01f // initial I gain
+#define DEFAULT_THRO_PITCH_I_GAIN            0.005f // initial I gain
 #define DEFAULT_THRO_PITCH_D_GAIN            0.0f // initial D gain
 #define DEFAULT_THRO_PITCH_FF_GAIN           0.0f  // initial feed-forward (FF)
 #define DEFAULT_THRO_PITCH_IMAX              0.5f // integrator max  is half throttle
