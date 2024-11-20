@@ -1,16 +1,27 @@
 @startuml Lass State Machine
 
+skinparam layout neato
+skinparam linetype ortho
 
 state ModeLoiterAssisted {
 
 ' States
 state "init()" as init: \
-sets default state based on whether we are attached or not
+runs checks and initializes variables
+
+state "ModeLoiterAssisted" as mode_lass: \
+sets loiter assisted as current mode
+
+state "Last Mode" as mode_last: \
+Reject LASS mode and return to the previous flight mode
+
+state c <<choice>>
 
 ' Transitions
-[*] --> init : set_mode()
-init --> [*] : else
-init --> init : if (AltHoldModeState::Flying || attached)
+[*] -[#black]-> init : set_mode()
+init -[#black]-> c
+c -[#black]-> mode_lass : if (AltHoldModeState::Flying || attached)
+c -[#black]-> mode_last : else
 
 ' ==========================
 --
@@ -24,32 +35,37 @@ heading locked
 
 State AttachManeuver {
 State LeadUp: \
-use pos control to hit pos vel target \n\
-keep yaw pointed at obstacle
+use velocity control to hit static vel vector to dock \n\
+static heading pointed at dock 
 
 State CoastIn: \
 pitch set based on lead up \n\
 roll, pitch, yaw rates to zero
 
 State WindDown: \
-relax the controllers to smoothly settle
+gently reduce throttle. \n\
+relax roll, pitch, \n\
+command zero yaw rate
 }
-
 
 state Vegetable: \
 disable crash checks \n\
-disable mode changes 
+mode changes still allowed \n\
+considered a landed state
 
 State DetachManeuver {
 State WindUp: \
-pitch set based on reverse of lead up
+slowly wind up throttle until pitch target is hit \n\
+relax pitch and roll \n\
+try and hold zero yaw rate
 
 State CoastOut: \
 send detach signal to mcu \n\
-roll, pitch, yaw rates held constant
+target zero roll and 5 deg pitch \n\
+hold zero yaw rate
 
 State Recover: \
-use pos control to get to safe distance
+use pos control to get to recovery position
 }
 
 State Default: \
@@ -58,35 +74,35 @@ go to normal loiter code when nothing detected
 ' State Abort: \
 ' abort state to escape blade
 
-
 ' Transitions
-[*] --> Default
-Default --> Lass : DOCK_FOUND
-Default --> WindDown : ATTACHED
-Lass --> Default : !DOCK_FOUND
-Lass --> LeadUp : DOCKING_ENGAGED
-Lass --> WindDown : ATTACHED
-LeadUp --> CoastIn : WITHIN_COAST_IN_DIST
-LeadUp --> WindDown : ATTACHED
-LeadUp --> Lass : !ATTACH_BUTTON_PRESSED
-CoastIn --> WindDown : ATTACHED
-' CoastIn --> Abort : FALLING
-WindDown --> Vegetable : WINDED_DOWN
-' WindDown --> Abort : FALLING
-Vegetable --> WindUp : !ATTACH_BUTTON_PRESSED
-WindUp --> CoastOut : STABLE_AT_WIND_UP_PITCH
-CoastOut --> Recover : BEYOND_COAST_OUT_DIST
-Recover --> Lass : AT_RECOVERY_POSITION
+[*] -[#black]-> Default
+Default -[#red]-> Lass : DOCK_FOUND
+Default -[#red]-> WindDown : ATTACHED
+Lass -[#green]-> Default : !DOCK_FOUND
+Lass -[#green]-> LeadUp : DOCKING_ENGAGED
+Lass -[#green]-> WindDown : ATTACHED
+LeadUp -[#black]-> CoastIn : WITHIN_COAST_IN_DIST
+LeadUp -[#black]-> WindDown : ATTACHED
+LeadUp -[#black]-> Lass : DETACH_BUTTON_PRESSED
+CoastIn -[#red]-> WindDown : ATTACHED
+' CoastIn -[#black]-> Abort : FALLING
+WindDown -[#green]-> Vegetable : WINDED_DOWN
+' WindDown -[#black]-> Abort : FALLING
+Vegetable -[#black]-> WindUp : !ATTACH_BUTTON_PRESSED
+WindUp -[#red]-> CoastOut : STABLE_AT_WIND_UP_PITCH
+WindUp -[#red]-> WindDown : ATTACH_BUTTON_PRESSED
+CoastOut -[#green]-> Recover : BEYOND_COAST_OUT_DIST
+Recover -[#black]-> Lass : AT_RECOVERY_POSITION
 }
 
 State AbortExit: \
 Leave lass state, try to return to \n\
 last state, otherwise stabilize
  
-[*] --> run : update_flight_mode()
-run --> [*] : lass_disengage
-run --> AbortExit : No Pos Estimate
-AbortExit --> [*]
+[*] -[#black]-> run : update_flight_mode()
+run -[#black]-> [*] : lass_disengage
+run -[#black]-> AbortExit : No Pos Estimate
+AbortExit -[#black]-> [*]
 }
 
 
