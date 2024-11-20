@@ -31,13 +31,13 @@
 #define LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
 #define UPPER_COAST_IN_PITCH_BOUND_DEG     0.0f
 #define RECOVERY_DIST_THRESH_CM            10.0f
-#define COAST_OUT_DIST_CM                  20.0f
+#define COAST_OUT_DIST_CM                  30.0f
 #define HEADING_NORMAL_TOL_DEG             5.0f    // degrees between heading and dock surface normal   
 #define MAX_THROTTLE_CORRECTION            0.1f    // thr_ratio_units per second 0.0 - 1.0
 #define THROTTLE_PITCH_CONTROL_GAIN        0.001f   // thr_ratio_units/deg/step. In wind up, controls throttle to pitch angle controller
 #define ATT_CONTROL_RATE_LIM_DEG_S         2.0f  
-#define BACKUP_RECOVERY_DIST_BACK_M        2.0f  // distance back from current pos the recovery target will be set to
-#define BACKUP_RECOVERY_DIST_UP_M          0.5f  // distance up from current pos the recovery target will be set to
+#define BACKUP_RECOVERY_DIST_BACK_M        1.5f  // distance back from current pos the recovery target will be set to
+#define BACKUP_RECOVERY_DIST_UP_M          0.25f  // distance up from current pos the recovery target will be set to
 #define DOCK_COMMS_PERIOD_MS               1500  // when the dock expects an att_st message heartbeat
 
 // Misc defines
