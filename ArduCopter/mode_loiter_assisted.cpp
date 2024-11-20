@@ -29,7 +29,7 @@
 // Hard coded parameters
 #define WIND_UP_PITCH_TOL_DEG              0.5f   
 #define LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
-#define UPPER_COAST_IN_PITCH_BOUND_DEG     -1.0f
+#define UPPER_COAST_IN_PITCH_BOUND_DEG     0.0f
 #define RECOVERY_DIST_THRESH_CM            10.0f
 #define COAST_OUT_DIST_CM                  20.0f
 #define HEADING_NORMAL_TOL_DEG             5.0f    // degrees between heading and dock surface normal   
@@ -483,7 +483,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
 
         lasmData data;
         data.TimeUS = AP_HAL::micros64();
-        data.pit = wind_down_throttle;
+        data.thr = wind_down_throttle;
         logLasm(data);
         break;}
     default:{
