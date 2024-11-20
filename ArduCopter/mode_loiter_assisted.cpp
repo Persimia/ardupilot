@@ -173,6 +173,13 @@ ModeLoiterAssisted::ModeLoiterAssisted(void) : Mode()
 // loiter_init - initialise loiter controller
 bool ModeLoiterAssisted::init(bool ignore_checks)
 {
+    #if AP_DDS_ENABLED
+    if (AP_DDS_Client::attached_state != _flags.ATTACHED) {
+        set_attached_status(static_cast<float>(AP_DDS_Client::attached_state));
+    }  
+    _flags.DOCK_COMMS_HEALTHY = true;
+    #endif
+
     // Failsafes
     if (copter.failsafe.radio) {return false;}// TODO what failsafe mode should we use?
     if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m)) {return false;}
@@ -479,11 +486,18 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
         attitude_control->set_throttle_out(wind_down_throttle, false, g.throttle_filt);
         if (wind_down_throttle < FLT_EPSILON) {_flags.THROTTLE_WOUND_DOWN = true;} 
         else {_flags.THROTTLE_WOUND_DOWN = false;}
-        attitude_control->relax_attitude_controllers();
+        // attitude_control->relax_attitude_controllers();
+        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(
+            ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
+            ahrs.get_pitch()*RAD_TO_DEG*DEG_TO_CD, // current pitch
+            0.0f // zero yaw rate
+        ); // might not be needed. or might need to change to target a specific yaw...
 
         lasmData data;
         data.TimeUS = AP_HAL::micros64();
         data.thr = wind_down_throttle;
+        data.rol = ahrs.get_roll()*RAD_TO_DEG;
+        data.pit = ahrs.get_pitch()*RAD_TO_DEG;
         logLasm(data);
         break;}
     default:{
@@ -548,6 +562,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.VEHICLE_STATIONARY && _flags.AT_WIND_UP_PITCH) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
+        else if (_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::WindDown);} 
         else {
             float vel_ms = _velocity_NED_m.length();
             float pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
@@ -598,13 +613,19 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
             // }
             
             attitude_control->set_throttle_out(throttle, false, 0.0f);
-            attitude_control->relax_attitude_controllers();
-            // attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, current_pitch_deg*DEG_TO_CD, 0.0f); // might not be needed
+            // attitude_control->relax_attitude_controllers();
+            attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(
+                ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
+                current_pitch_deg*DEG_TO_CD, // current pitch
+                0.0f // zero yaw rate
+            ); // might not be needed. or might need to change to target a specific yaw...
         }
 
         lasmData data;
         data.TimeUS = AP_HAL::micros64();
         data.thr = throttle;
+        data.rol = ahrs.get_roll()*RAD_TO_DEG;
+        data.pit = ahrs.get_pitch()*RAD_TO_DEG;
         logLasm(data);
 
         break;}
@@ -764,7 +785,7 @@ void ModeLoiterAssisted::findDockTarget(){
         }
         // Filter and evaluate dock normal vector
         _filt_dock_normal_NEU = _dock_norm_filter.apply(dock_normal_vec);
-        _heading_normal_error_deg = wrap_PI(ahrs.get_yaw() - _filt_dock_normal_NEU.angle() + M_PIf)*RAD_TO_DEG;
+        _heading_normal_error_deg = wrap_PI(ahrs.get_yaw() - _filt_dock_normal_NEU.angle() + float(M_PI))*RAD_TO_DEG;
         if (abs(_heading_normal_error_deg) < HEADING_NORMAL_TOL_DEG) {
             _flags.HEADING_NORMAL_ALIGNED = true;
         } else {

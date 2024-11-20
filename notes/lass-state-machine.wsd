@@ -68,13 +68,14 @@ Lass --> LeadUp : DOCKING_ENGAGED
 Lass --> WindDown : ATTACHED
 LeadUp --> CoastIn : WITHIN_COAST_IN_DIST
 LeadUp --> WindDown : ATTACHED
-LeadUp --> Lass : !ATTACH_BUTTON_PRESSED
+LeadUp --> Lass : DETACH_BUTTON_PRESSED
 CoastIn --> WindDown : ATTACHED
 ' CoastIn --> Abort : FALLING
 WindDown --> Vegetable : WINDED_DOWN
 ' WindDown --> Abort : FALLING
 Vegetable --> WindUp : !ATTACH_BUTTON_PRESSED
 WindUp --> CoastOut : STABLE_AT_WIND_UP_PITCH
+WindUp --> WindDown : ATTACH_BUTTON_PRESSED
 CoastOut --> Recover : BEYOND_COAST_OUT_DIST
 Recover --> Lass : AT_RECOVERY_POSITION
 }
