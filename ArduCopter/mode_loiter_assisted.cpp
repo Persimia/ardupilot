@@ -31,7 +31,7 @@
 #define LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
 #define UPPER_COAST_IN_PITCH_BOUND_DEG     0.0f
 #define RECOVERY_DIST_THRESH_CM            10.0f
-#define COAST_OUT_DIST_CM                  30.0f
+#define COAST_OUT_DIST_CM                  20.0f
 #define HEADING_NORMAL_TOL_DEG             5.0f    // degrees between heading and dock surface normal   
 #define MAX_THROTTLE_CORRECTION            0.1f    // thr_ratio_units per second 0.0 - 1.0
 #define THROTTLE_PITCH_CONTROL_GAIN        0.001f   // thr_ratio_units/deg/step. In wind up, controls throttle to pitch angle controller
@@ -300,12 +300,12 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
                     _last_send_lass = millis();
                 }
                 if (!_flags.VEHICLE_STATIONARY) {
-                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Vel: (%.4f, %.4f, %.4f). Len: %.4f > %.4f\n", 
+                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Vel: (%.4f, %.4f, %.4f). Len: %.4f > %.4f", 
                         _velocity_NED_m.x, _velocity_NED_m.y, _velocity_NED_m.z, _velocity_NED_m.length(), _stationary_vel_m_s.get());
                     _last_send_lass = millis();
                 }
                 if (!_flags.HEADING_NORMAL_ALIGNED) {
-                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Heading-normal error: %.4f >= %.4f\n", 
+                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Heading-normal error: %.4f >= %.4f", 
                         _heading_normal_error_deg, HEADING_NORMAL_TOL_DEG);
                     _last_send_lass = millis();
                 }
