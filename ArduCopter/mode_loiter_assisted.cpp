@@ -348,7 +348,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         pos_control->update_z_controller();
         attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
         lasmData data;
-        data.TimeUS = AP_HAL::micros64();
         data.hdg = filt_heading_cmd_deg;
         data.tpX = target_xy_NEU_cm.x/M_TO_CM;
         data.tpY = target_xy_NEU_cm.y/M_TO_CM;
@@ -406,7 +405,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
 
         lasmData data;
-        data.TimeUS = AP_HAL::micros64();
         data.hdg = _locked_heading_deg;
         data.tvX = _locked_vel_NE_cm_s.x/M_TO_CM;
         data.tvY = _locked_vel_NE_cm_s.y/M_TO_CM;
@@ -444,7 +442,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _coast_in_pitch_cd, 0.0f);
 
         lasmData data;
-        data.TimeUS = AP_HAL::micros64();
         data.hdg = _locked_heading_deg;
         data.pit = _coast_in_pitch_cd/DEG_TO_CD;
         data.tvZ = 0.0f;
@@ -494,7 +491,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
         ); // might not be needed. or might need to change to target a specific yaw...
 
         lasmData data;
-        data.TimeUS = AP_HAL::micros64();
         data.thr = wind_down_throttle;
         data.rol = ahrs.get_roll()*RAD_TO_DEG;
         data.pit = ahrs.get_pitch()*RAD_TO_DEG;
@@ -528,9 +524,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
         lasmData data;
-        data.TimeUS = AP_HAL::micros64();
-        data.dss = motors->get_desired_spool_state();
-        data.ss = motors->get_spool_state();
         logLasm(data);
         
         break;}
@@ -622,7 +615,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         }
 
         lasmData data;
-        data.TimeUS = AP_HAL::micros64();
         data.thr = throttle;
         data.rol = ahrs.get_roll()*RAD_TO_DEG;
         data.pit = ahrs.get_pitch()*RAD_TO_DEG;
@@ -665,7 +657,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastOut(const Event e) {
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _wind_up_pitch_deg*DEG_TO_CD, 0.0f);
 
         lasmData data;
-        data.TimeUS = AP_HAL::micros64();
         data.pit = _wind_up_pitch_deg;
         logLasm(data);
 
@@ -713,7 +704,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
         attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), ahrs.get_yaw()*RAD_TO_DEG*DEG_TO_CD);
         
         lasmData data;
-        data.TimeUS = AP_HAL::micros64();
         data.tpX = _recovery_position_NED_m.x,
         data.tpY = _recovery_position_NED_m.y,
         data.tpZ = _recovery_position_NED_m.z,
@@ -870,7 +860,7 @@ void ModeLoiterAssisted::logLasm(const lasmData &data) {
             "smmmnnnddd---", // units
             "F000000000000", // mults
             "QffffffffffBB", // format
-            data.TimeUS,
+            AP_HAL::micros64(),
             data.tpX, // cmded x position NEU m
             data.tpY, // cmded y position NEU m
             data.tpZ, // cmded z position NEU m

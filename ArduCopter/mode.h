@@ -1450,7 +1450,6 @@ private:
     Vector3f _docked_position_NED_m;
     bool _is_taking_off{false};
     struct lasmData {
-        uint32_t TimeUS = 0;
         float tpX = AP::logger().quiet_nanf(); // cmded x position NEU m
         float tpY = AP::logger().quiet_nanf(); // cmded y position NEU m
         float tpZ = AP::logger().quiet_nanf(); // cmded z position NEU m
@@ -1461,8 +1460,6 @@ private:
         float pit = AP::logger().quiet_nanf(); // cmded pitch deg
         float hdg = AP::logger().quiet_nanf(); // cmded yaw deg
         float thr = AP::logger().quiet_nanf(); // cmded throttle unitless
-        AP_Motors::DesiredSpoolState dss;
-        AP_Motors::SpoolState ss;
     };
     void logLasm(const lasmData &data);
     AC_PID_Basic _thro_pitch_pid{
