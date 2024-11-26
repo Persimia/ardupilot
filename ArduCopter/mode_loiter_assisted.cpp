@@ -569,14 +569,14 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         // Flight Code
         float throttle = 0.0f;
         if (motors->get_spool_state() != AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
-            // motors have not completed spool up yet so relax navigation and position controllers
-            pos_control->relax_velocity_controller_xy();
-            pos_control->update_xy_controller();
-            pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
-            pos_control->update_z_controller();
-            attitude_control->reset_yaw_target_and_rate();
-            attitude_control->reset_rate_controller_I_terms();
-            attitude_control->input_thrust_vector_rate_heading(pos_control->get_thrust_vector(), 0.0f);
+            // // motors have not completed spool up yet so relax navigation and position controllers
+            // pos_control->relax_velocity_controller_xy();
+            // pos_control->update_xy_controller();
+            // pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
+            // pos_control->update_z_controller();
+            // attitude_control->reset_yaw_target_and_rate();
+            // attitude_control->reset_rate_controller_I_terms();
+            // attitude_control->input_thrust_vector_rate_heading(pos_control->get_thrust_vector(), 0.0f);
         } else { // Motors are spooled up
             // // now pitch is controlled by throttle, not just the relationship between motors, we need to use throttle to control pitch
             // throttle = attitude_control->get_throttle_in();
@@ -642,6 +642,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastOut(const Event e) {
         AP_DDS_Client::desire_attach = false;
         #endif
         gcs().send_named_float("attach", 0.0f);
+        pos_control->init_xy_controller();
+        pos_control->init_z_controller();   
         
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
@@ -901,7 +903,7 @@ void ModeLoiterAssisted::evaluateFlags() { // ALL FLAGS MUST BE SET TO FALSE INI
     // Check if we are within the coast in distance
     if (_flags.DOCK_FOUND) { 
         _dist_to_dock_cm = (_filt_dock_xyz_NEU_m.xy()-_cur_pos_NED_m.xy()).length()*M_TO_CM;
-        if (_dist_to_dock_cm < _coast_in_dist_cm) {
+        if (_dist_to_dock_cm < _coast_in_dist_cm.get()) {
             _flags.WITHIN_COAST_IN_DIST = true;
         }
     }
