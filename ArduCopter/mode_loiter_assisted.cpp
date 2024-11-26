@@ -6,21 +6,44 @@
 
 #if MODE_LOITER_ASSISTED_ENABLED == ENABLED
 
-/*
- * Init and run calls for loiter flight mode
- */
-
-#define VEL_MAX_DEFAULT                      50
-#define MIN_OBS_DIST_CM_DEFAULT              50
-#define YAW_HZ_DEFAULT                       100.0
-#define DIST_HZ_DEFAULT                      100.0
-#define POS_HZ_DEFAULT                       100.0
+// Parameter defaults
+#define VEL_MAX_DEFAULT                      50.0f
+#define MIN_OBS_DIST_CM_DEFAULT              50.0f
+#define POS_HZ_DEFAULT                       1.0f // lower means less trust of new measurements
 #define WV_WIND_DEFAULT                      5
-#define WV_THRESH_DEFAULT                    0.1 
-#define DOCK_SPEED_CMS_DEFAULT               10.0
-#define UNDOCK_SPEED_CMS_DEFAULT             50.0
+#define WV_THRESH_DEFAULT                    0.1f 
+#define DOCK_SPEED_CM_S_DEFAULT              10.0f
+#define UNDOCK_SPEED_CM_S_DEFAULT            50.0f
+#define CID_CM_DEFAULT                       30.0f // coast in distance
+#define WUP_DEG_DEFAULT                      5.0f
+#define DEFAULT_THRO_PITCH_P_GAIN            0.0f  // initial P gain
+#define DEFAULT_THRO_PITCH_I_GAIN            0.005f // initial I gain
+#define DEFAULT_THRO_PITCH_D_GAIN            0.0f // initial D gain
+#define DEFAULT_THRO_PITCH_FF_GAIN           0.0f  // initial feed-forward (FF)
+#define DEFAULT_THRO_PITCH_IMAX              0.5f // integrator max  is half throttle
+#define DEFAULT_THRO_PITCH_ERR_HZ            400.0f // error filter frequency in Hz
+#define DEFAULT_THRO_PITCH_D_HZ              400.0f  // derivative filter frequency in Hz
+#define DEFAULT_STATIONARY_VEL_M_S           0.05f    // vehicle velocity must be under m/s
 
-bool ModeLoiterAssisted::attached_state = false;  // Initialization
+
+// Hard coded parameters
+#define WIND_UP_PITCH_TOL_DEG              0.5f   
+#define LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
+#define UPPER_COAST_IN_PITCH_BOUND_DEG     0.0f
+#define RECOVERY_DIST_THRESH_CM            10.0f
+#define COAST_OUT_DIST_CM                  20.0f
+#define HEADING_NORMAL_TOL_DEG             5.0f    // degrees between heading and dock surface normal   
+#define MAX_THROTTLE_CORRECTION            0.1f    // thr_ratio_units per second 0.0 - 1.0
+#define THROTTLE_PITCH_CONTROL_GAIN        0.001f   // thr_ratio_units/deg/step. In wind up, controls throttle to pitch angle controller
+#define ATT_CONTROL_RATE_LIM_DEG_S         2.0f  
+#define BACKUP_RECOVERY_DIST_BACK_M        1.5f  // distance back from current pos the recovery target will be set to
+#define BACKUP_RECOVERY_DIST_UP_M          0.25f  // distance up from current pos the recovery target will be set to
+#define DOCK_COMMS_PERIOD_MS               1500  // when the dock expects an att_st message heartbeat
+
+// Misc defines
+#define DEG_TO_CD                       100.0f // centidegrees per degree
+#define M_TO_CM                         100.0f // centimeters per meter
+
 
 const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Param: VEL_MAX
@@ -28,7 +51,7 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Description: Max velocity commandable by sticks cm/s
     // @Range: 0 2
     // @User: Advanced
-    AP_GROUPINFO("VEL_MAX", 1, ModeLoiterAssisted, _vel_max_cms, VEL_MAX_DEFAULT),
+    AP_GROUPINFO("VEL_MAX", 1, ModeLoiterAssisted, _vel_max_cm_s, VEL_MAX_DEFAULT),
 
     // @Param: MIN_DIST
     // @DisplayName: Minimum dist to obstacle cm
@@ -38,40 +61,26 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("MIN_DIST", 2, ModeLoiterAssisted, _min_obs_dist_cm, MIN_OBS_DIST_CM_DEFAULT),
 
-    // @Param: YAW_HZ
-    // @DisplayName: Yaw LPF alpha
-    // @Description: This is the alpha for lpf on yaw [x*a + y*(a-1)]
-    // @Range: 0 100
-    // @User: Advanced
-    AP_GROUPINFO("YAW_HZ", 3, ModeLoiterAssisted, _yaw_hz, YAW_HZ_DEFAULT),
-
     // @Param: POS_HZ
     // @DisplayName: Pos LPF alpha
     // @Description: This is the alpha for lpf on dist [x*a + y*(a-1)]
     // @Range: 0 100
     // @User: Advanced
-    AP_GROUPINFO("POS_HZ", 4, ModeLoiterAssisted, _pos_filt_hz, POS_HZ_DEFAULT),
-
-    // @Param: DIST_HZ
-    // @DisplayName: Dist LPF alpha
-    // @Description: This is the alpha for lpf on dist [x*a + y*(a-1)]
-    // @Range: 0 100
-    // @User: Advanced
-    AP_GROUPINFO("DIST_HZ", 5, ModeLoiterAssisted, _dist_filt_hz, DIST_HZ_DEFAULT),
+    AP_GROUPINFO("POS_HZ", 3, ModeLoiterAssisted, _dock_pos_filt_hz, POS_HZ_DEFAULT),
 
     // @Param: WV_WIND
     // @DisplayName: Window Var window size
     // @Description: min samples for window var estimator to provide variance estimate
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("WV_WIND", 6, ModeLoiterAssisted, _wv_window_size, WV_WIND_DEFAULT),
+    AP_GROUPINFO("WV_WIND", 4, ModeLoiterAssisted, _wv_window_size, WV_WIND_DEFAULT),
 
     // @Param: WV_THRESH
     // @DisplayName: Window Var threshold for good docking
     // @Description: Variance threshold that has to be met to enable docking
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("WV_THRESH", 7, ModeLoiterAssisted, _wv_thresh, WV_THRESH_DEFAULT),
+    AP_GROUPINFO("WV_THRESH", 5, ModeLoiterAssisted, _wv_thresh, WV_THRESH_DEFAULT),
 
     // @Param: DOCK_SPD
     // @DisplayName: Dock speed cm/s
@@ -79,7 +88,7 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Unit: mps
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("DOCK_SPD", 8, ModeLoiterAssisted, _dock_speed_cms, DOCK_SPEED_CMS_DEFAULT),
+    AP_GROUPINFO("DOCK_SPD", 6, ModeLoiterAssisted, _dock_speed_cm_s, DOCK_SPEED_CM_S_DEFAULT),
 
     // @Param: UNDOCK_SPD
     // @DisplayName: UnDock speed cm/s
@@ -87,7 +96,70 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Unit: mps
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("UNDOCK_SPD", 9, ModeLoiterAssisted, _undock_speed_cms, UNDOCK_SPEED_CMS_DEFAULT),
+    AP_GROUPINFO("UNDOCK_SPD", 7, ModeLoiterAssisted, _undock_speed_cm_s, UNDOCK_SPEED_CM_S_DEFAULT),
+
+    // @Param{Copter}: CID_M
+    // @DisplayName: Coast in distance in cm
+    // @Description: Coast in distance in cm
+    // @Units: cm
+    // @User: Advanced
+    AP_GROUPINFO("CID_CM", 8, ModeLoiterAssisted, _coast_in_dist_cm, CID_CM_DEFAULT),
+
+    // @Param{Copter}: WUP_DEG
+    // @DisplayName: Wind up pitch angle for wind up to target in degrees
+    // @Description: Wind up pitch angle for wind up to target in degrees
+    // @Units: deg
+    // @User: Advanced
+    AP_GROUPINFO("WUP_DEG", 9, ModeLoiterAssisted, _wind_up_pitch_deg, WUP_DEG_DEFAULT),
+
+    // @Param{Copter}: TP_P
+    // @DisplayName: Wind up pitch angle for wind up to target in degrees
+    // @Description: Wind up pitch angle for wind up to target in degrees
+    // @User: Advanced
+    AP_GROUPINFO("TP_P", 10, ModeLoiterAssisted, _thro_pitch_p, DEFAULT_THRO_PITCH_P_GAIN),
+
+    // @Param{Copter}: TP_I
+    // @DisplayName: Wind up pitch angle for wind up to target in degrees
+    // @Description: Wind up pitch angle for wind up to target in degrees
+    // @User: Advanced
+    AP_GROUPINFO("TP_I", 11, ModeLoiterAssisted, _thro_pitch_i, DEFAULT_THRO_PITCH_I_GAIN),
+
+    // @Param{Copter}: TP_D
+    // @DisplayName: Wind up pitch angle for wind up to target in degrees
+    // @Description: Wind up pitch angle for wind up to target in degrees
+    // @User: Advanced
+    AP_GROUPINFO("TP_D", 12, ModeLoiterAssisted, _thro_pitch_d, DEFAULT_THRO_PITCH_D_GAIN),
+
+    // @Param{Copter}: TP_FF
+    // @DisplayName: Wind up pitch angle for wind up to target in degrees
+    // @Description: Wind up pitch angle for wind up to target in degrees
+    // @User: Advanced
+    AP_GROUPINFO("TP_FF", 13, ModeLoiterAssisted, _thro_pitch_ff, DEFAULT_THRO_PITCH_FF_GAIN),
+
+    // @Param{Copter}: TP_IM
+    // @DisplayName: Wind up pitch angle for wind up to target in degrees
+    // @Description: Wind up pitch angle for wind up to target in degrees
+    // @User: Advanced
+    AP_GROUPINFO("TP_IM", 14, ModeLoiterAssisted, _thro_pitch_imax, DEFAULT_THRO_PITCH_IMAX),
+
+    // @Param{Copter}: TP_EHZ
+    // @DisplayName: Wind up pitch angle for wind up to target in degrees
+    // @Description: Wind up pitch angle for wind up to target in degrees
+    // @User: Advanced
+    AP_GROUPINFO("TP_EHZ", 15, ModeLoiterAssisted, _thro_pitch_err_hz, DEFAULT_THRO_PITCH_ERR_HZ),
+    
+    // @Param{Copter}: TP_DHZ
+    // @DisplayName: Wind up pitch angle for wind up to target in degrees
+    // @Description: Wind up pitch angle for wind up to target in degrees
+    // @User: Advanced
+    AP_GROUPINFO("TP_DHZ", 16, ModeLoiterAssisted, _thro_pitch_d_hz, DEFAULT_THRO_PITCH_D_HZ),
+
+    // @Param{Copter}: STAT_V
+    // @DisplayName: Stationary velocity target
+    // @Description: Stationary velocity target
+    // @Units: m/s
+    // @User: Advanced
+    AP_GROUPINFO("STAT_V", 17, ModeLoiterAssisted, _stationary_vel_m_s, DEFAULT_STATIONARY_VEL_M_S),
 
     AP_GROUPEND
 };
@@ -101,497 +173,803 @@ ModeLoiterAssisted::ModeLoiterAssisted(void) : Mode()
 // loiter_init - initialise loiter controller
 bool ModeLoiterAssisted::init(bool ignore_checks)
 {
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Mode set to Loiter Assisted");
+    #if AP_DDS_ENABLED
+    if (AP_DDS_Client::attached_state != _flags.ATTACHED) {
+        set_attached_status(static_cast<float>(AP_DDS_Client::attached_state));
+    }  
+    _flags.DOCK_COMMS_HEALTHY = true;
+    #endif
 
-    if (!copter.failsafe.radio) {
-        float target_roll, target_pitch;
-        // apply SIMPLE mode transform to pilot inputs
-        update_simple_mode();
+    // Failsafes
+    if (copter.failsafe.radio) {return false;}// TODO what failsafe mode should we use?
+    if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m)) {return false;}
+    float target_climb_rate_cm_s = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
+    target_climb_rate_cm_s = constrain_float(target_climb_rate_cm_s, -get_pilot_speed_dn(), g.pilot_speed_up);
+    AltHoldModeState alt_hold_state = get_alt_hold_state(target_climb_rate_cm_s);
+    if (!(alt_hold_state == AltHoldModeState::Flying || _flags.ATTACHED)) {return false;}
 
-        // convert pilot input to lean angles
-        get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
-
-        // process pilot's roll and pitch input
-        loiter_nav->set_pilot_desired_acceleration(target_roll, target_pitch);
-    } else {
-        // clear out pilot desired acceleration in case radio failsafe event occurs and we do not switch to RTL for some reason
-        loiter_nav->clear_pilot_desired_acceleration();
-    }
-    loiter_nav->init_target();
-
-    // initialise the vertical position controller
-    if (!pos_control->is_active_z()) {
-        pos_control->init_z_controller();
-    }
-
-    // set vertical speed and acceleration limits
+    // Pos control inits
+    if (!pos_control->is_active_z()) {pos_control->init_z_controller();}
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
     pos_control->set_correction_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
-
-    _target_acquired = false;
-
     copter.set_simple_mode(Copter::SimpleMode::NONE); // disable simple mode for this mode. TODO: Validate
 
-    _crash_check_enabled = true;
-    _docking_state = DockingState::NOT_DOCKING;
-    _yaw_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _yaw_hz.get());
-    _dist_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dist_filt_hz.get());
-    _dock_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _pos_filt_hz.get()); // TODO: use custom dock hz param
-    _dock_target_window_var = WindowVar(_wv_window_size.get()); // reinit with new min samples
-    _yaw_buf = ModeLoiterAssisted::YawBuffer(); // reinit yaw buffer
-    _time_since_last_yaw = millis();
-    _init_time = millis();
-    _lock_commands = false;
-#if AC_PRECLAND_ENABLED
-    _precision_loiter_active = false;
-#endif
+    // Initialize all filters owned by this mode
+    InitFilters();
 
+    // Set State (assuming not attached for now)
+    TRAN(&ModeLoiterAssisted::Default);
+    (this->*_lass_state)(Event::ENTRY_SIG); // perform entry actions
+
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Mode set to Loiter Assisted");
     return true;
 }
 
-bool ModeLoiterAssisted::attach() { // init attach engaged via RC_Channel
-    if (_docking_state == DockingState::ATTACH_MANEUVER) {
-        return true;
-    }
-    if (!_ready_to_dock) {
-        GCS_SEND_TEXT(MAV_SEVERITY_ALERT, "Variance too high, not ready to dock");
-        return false;
-    }
-    #if AP_DDS_ENABLED
-    // AP_DDS publish attach message... should change to state setup?
-    AP_DDS_Client::need_to_pub_attach_detach = true;
-    AP_DDS_Client::desire_attach = true;
-    #endif
-    gcs().send_named_float("attach", 1.0f);
-
-
-    _crash_check_enabled = false;
-
-    _docking_state = DockingState::ATTACH_MANEUVER;
-
-    _lock_commands = true;
-    // if (ahrs.get_relative_position_NED_origin(_current_vehicle_position)){
-    //     pos_control->set_pos_target_xy_cm(_current_vehicle_position.x*100, _current_vehicle_position.y*100); // TODO Remove this eventually
-
-    // }
-
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Attach primed");
-    return true;
-}
-
-bool ModeLoiterAssisted::detach() { // init detach engaged via RC_Channel
-    if (_docking_state == DockingState::DETACH_MANEUVER) {
-        return true;
-    }
-    if (_docking_state == DockingState::NOT_DOCKING) { // only detach when we are attaching or attached
-        return false;
-    }
-    #if AP_DDS_ENABLED
-    // AP_DDS publish detach message
-    AP_DDS_Client::need_to_pub_attach_detach = true;
-    AP_DDS_Client::desire_attach = false;
-    #endif
-    gcs().send_named_float("attach", 0.0f);
-
-
-    _docking_state = DockingState::DETACH_MANEUVER;
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Detach primed");
-    return true;
-}
-
-bool ModeLoiterAssisted::attached() { // start being attached
-    if (_docking_state == DockingState::ATTACHED) {
-        return true;
-    }
-
-    _docking_state = DockingState::ATTACHED;
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Attached!");
-    return true;
-}
-
-
-#if AC_PRECLAND_ENABLED
-bool ModeLoiterAssisted::do_precision_loiter()
-{
-    if (!_precision_loiter_enabled) {
-        return false;
-    }
-    if (copter.ap.land_complete_maybe) {
-        return false;        // don't move on the ground
-    }
-    // if the pilot *really* wants to move the vehicle, let them....
-    if (loiter_nav->get_pilot_desired_acceleration().length() > 50.0f) {
-        return false;
-    }
-    if (!copter.precland.target_acquired()) {
-        return false; // we don't have a good vector
-    }
-    return true;
-}
-
-void ModeLoiterAssisted::precision_loiter_xy()
-{
-    loiter_nav->clear_pilot_desired_acceleration();
-    Vector2f target_pos, target_vel;
-    if (!copter.precland.get_target_position_cm(target_pos)) {
-        target_pos = inertial_nav.get_position_xy_cm();
-    }
-    // get the velocity of the target
-    copter.precland.get_target_velocity_cms(inertial_nav.get_velocity_xy_cms(), target_vel);
-
-    Vector2f zero;
-    Vector2p landing_pos = target_pos.topostype();
-    // target vel will remain zero if landing target is stationary
-    pos_control->input_pos_vel_accel_xy(landing_pos, target_vel, zero);
-    // run pos controller
-    pos_control->update_xy_controller();
-}
-#endif
-
-// loiter_run - runs the loiter controller
 // should be called at 100hz or more
 void ModeLoiterAssisted::run()
 {
-    // float delete_me_1;
-    // float delete_me_2;
-    // Vector2f delete_me_3; 
-    // Vector2f delete_me_4;
-    // Vector2f delete_me_5;
-    // bool test = g2.proximity.curvefit->get_target(delete_me_1, delete_me_2, delete_me_3, delete_me_4, delete_me_5);
-    // if (!test){
-    //     // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "No Obs")
+    #if AP_DDS_ENABLED
+    if (AP_DDS_Client::attached_state != _flags.ATTACHED) {
+        set_attached_status(static_cast<float>(AP_DDS_Client::attached_state));
+    }  
+    _flags.DOCK_COMMS_HEALTHY = true;
+    #endif
+
+    if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m) || !ahrs.get_velocity_NED(_velocity_NED_m)) {
+        GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"No pos or vel estimate!");
+        abortExit();
+    }
+
+    checkDockComms();
+    updateFilterParams(); // Update filters (simply check for param changes)
+    findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
+    evaluateFlags(); // evaluate some flags
+    sendFlagFeedback(); // send pilot feedback on flags
+    
+    evaluate_transitions(); // evaluate transitions
+    runFlightCode(); // run flight code for current state
+    
+    logLass(); // log everything of interest that isn't already logged elsewhere (i.e. pos and vel)
+}
+
+/*---------------------------------------------------------------------------*/
+/* Finite State Machine States... */
+ModeLoiterAssisted::Status ModeLoiterAssisted::Default(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::Default;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Default state");
+        _crash_check_enabled = true;
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.DOCK_FOUND) {status = TRAN(&ModeLoiterAssisted::Lass);}
+        else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else {}
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        float target_roll, target_pitch;
+        float target_yaw_rate = 0.0f;
+        float target_climb_rate_cm_s = 0.0f;
+        pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
+        get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
+        loiter_nav->set_pilot_desired_acceleration(target_roll, target_pitch);
+        target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->norm_input_dz());
+        target_climb_rate_cm_s = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
+        target_climb_rate_cm_s = constrain_float(target_climb_rate_cm_s, -get_pilot_speed_dn(), g.pilot_speed_up);
+        loiter_nav->update();
+        attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false); // call attitude controller
+        target_climb_rate_cm_s = get_avoidance_adjusted_climbrate(target_climb_rate_cm_s); // get avoidance adjusted climb rate
+        pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate_cm_s); // Send the commanded climb rate to the position controller
+        pos_control->update_z_controller();
+        
+        break;}
+    default:{
+        break;}
+    }
+    return status;
+}
+
+ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::Lass;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Lass state");
+        _crash_check_enabled = true;
+        Vector3f zero_vel;
+        pos_control->set_vel_desired_cms(zero_vel);
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (!_flags.DOCK_FOUND) {status = TRAN(&ModeLoiterAssisted::Default);}
+        else if (_flags.ATTACH_BUTTON_PRESSED && _flags.DOCK_STABLE && _flags.VEHICLE_STATIONARY && _flags.HEADING_NORMAL_ALIGNED) {status = TRAN(&ModeLoiterAssisted::LeadUp);}
+        else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else if (_flags.ATTACH_BUTTON_PRESSED) {
+            //Return why we are not switching to lead up
+            if (millis()-_last_send_lass > _log_period_ms) {
+                if (!_flags.DOCK_STABLE) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Variance: %.4fm >= %.4fm", _dock_target_var, _wv_thresh.get());
+                    _last_send_lass = millis();
+                }
+                if (!_flags.VEHICLE_STATIONARY) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Vel: (%.4f, %.4f, %.4f). Len: %.4f > %.4f", 
+                        _velocity_NED_m.x, _velocity_NED_m.y, _velocity_NED_m.z, _velocity_NED_m.length(), _stationary_vel_m_s.get());
+                    _last_send_lass = millis();
+                }
+                if (!_flags.HEADING_NORMAL_ALIGNED) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Heading-normal error: %.4f >= %.4f", 
+                        _heading_normal_error_deg, HEADING_NORMAL_TOL_DEG);
+                    _last_send_lass = millis();
+                }
+            }
+        }
+        else {}
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        // xy controller... TODO Change to velocity control!
+        float filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD;
+        // float filt_heading_cmd_deg = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x)*RAD_TO_DEG;
+        Vector2f target_xy_body_vel_cm_s = get_pilot_desired_velocity_xy(_vel_max_cm_s.get());
+        Vector2f target_xy_NEU_vel_cm_s = target_xy_body_vel_cm_s;
+        target_xy_NEU_vel_cm_s.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
+        Vector2f target_xy_NEU_cm = pos_control->get_pos_target_cm().tofloat().xy() + target_xy_NEU_vel_cm_s*G_Dt;
+        Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NEU_cm;
+        float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
+        if (target_to_dock_dist_cm < _min_obs_dist_cm.get()) {
+            // if too close, adjust to nearest pos that fits min distance condition
+            Vector2f min_dist_correction_vec_cm = target_to_dock_vec_cm.normalized()*abs(target_to_dock_dist_cm-_min_obs_dist_cm.get());
+            target_xy_NEU_cm -= min_dist_correction_vec_cm;
+        }
+        pos_control->set_pos_target_xy_cm(target_xy_NEU_cm.x, target_xy_NEU_cm.y);
+
+        // Yaw controller
+        AC_AttitudeControl::HeadingCommand heading_cmd;
+        heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
+        heading_cmd.yaw_angle_cd = filt_heading_cmd_deg*DEG_TO_CD; 
+        heading_cmd.yaw_rate_cds = 0.0f;
+
+        // z controller
+        float target_climb_rate_cm_s = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
+        target_climb_rate_cm_s = constrain_float(target_climb_rate_cm_s, -get_pilot_speed_dn(), g.pilot_speed_up);
+        target_climb_rate_cm_s = get_avoidance_adjusted_climbrate(target_climb_rate_cm_s); // get avoidance adjusted climb rate
+        pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate_cm_s); // Send the commanded climb rate to the position controller
+
+        // run controllers
+        pos_control->update_xy_controller();
+        pos_control->update_z_controller();
+        attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
+        lasmData data;
+        data.hdg = filt_heading_cmd_deg;
+        data.tpX = target_xy_NEU_cm.x/M_TO_CM;
+        data.tpY = target_xy_NEU_cm.y/M_TO_CM;
+        data.tvZ = target_climb_rate_cm_s/M_TO_CM;
+        logLasm(data);
+        break;}
+    default:{
+        break;}
+    }
+    return status;
+}
+
+ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::LeadUp;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering LeadUp state");
+        #if AP_DDS_ENABLED
+        AP_DDS_Client::need_to_pub_attach_detach = true;
+        AP_DDS_Client::desire_attach = true;
+        #endif
+        gcs().send_named_float("attach", 1.0f);
+        _crash_check_enabled = true;
+        
+        
+        float heading_rad = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD*DEG_TO_RAD;
+        // float heading_rad = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x);
+        _locked_heading_deg = heading_rad*RAD_TO_DEG;
+        _locked_vel_NE_cm_s = Vector2f(cosf(heading_rad),sinf(heading_rad))*_dock_speed_cm_s;
+        _recovery_position_NED_m = _cur_pos_NED_m;
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.WITHIN_COAST_IN_DIST) {status = TRAN(&ModeLoiterAssisted::CoastIn);}
+        else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else if (!_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::Lass);}
+        else {}
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        AC_AttitudeControl::HeadingCommand heading_cmd;
+        heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
+        heading_cmd.yaw_angle_cd = _locked_heading_deg*DEG_TO_CD;
+        heading_cmd.yaw_rate_cds = 0.0f;
+
+        pos_control->input_vel_accel_xy(_locked_vel_NE_cm_s, Vector2f(0.0f,0.0f));
+        pos_control->set_pos_target_z_from_climb_rate_cm(0.0f); // no climb rate
+
+        pos_control->update_xy_controller();
+        pos_control->update_z_controller();
+        attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
+
+        lasmData data;
+        data.hdg = _locked_heading_deg;
+        data.tvX = _locked_vel_NE_cm_s.x/M_TO_CM;
+        data.tvY = _locked_vel_NE_cm_s.y/M_TO_CM;
+        data.tvZ = 0.0f;
+        logLasm(data);
+        break;}
+    default:{
+        break;}
+    }
+    return status;
+}
+
+ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::CoastIn;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastIn state");
+        _crash_check_enabled = false;
+        _coast_in_pitch_cd = pos_control->get_pitch_cd();
+        _coast_in_pitch_cd = constrain_float(_coast_in_pitch_cd, LOWER_COAST_IN_PITCH_BOUND_DEG*DEG_TO_CD, UPPER_COAST_IN_PITCH_BOUND_DEG*DEG_TO_CD); // constrain
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else {}
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
+        pos_control->update_z_controller();
+        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _coast_in_pitch_cd, 0.0f);
+
+        lasmData data;
+        data.hdg = _locked_heading_deg;
+        data.pit = _coast_in_pitch_cd/DEG_TO_CD;
+        data.tvZ = 0.0f;
+        logLasm(data);
+        break;}
+    default:{
+        break;}
+    }
+    return status;
+}
+
+ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::WindDown;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindDown state");
+        _crash_check_enabled = false;
+        _wind_down_throttle_start = attitude_control->get_throttle_in();
+        _wind_down_start_ms = millis();
+        attitude_control->landed_gain_reduction(true);
+        _flags.THROTTLE_WOUND_DOWN = false;
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        _flags.THROTTLE_WOUND_DOWN = false;
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.VEHICLE_STATIONARY && _flags.THROTTLE_WOUND_DOWN) {status = TRAN(&ModeLoiterAssisted::Vegetable);} // are both necessary?
+        else {}
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        // float roll_cmd_cd = ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD; // TODO: Basically acts like relax roll, need to actively control roll when new dock mechanism is made
+        // attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(roll_cmd_cd,ahrs.get_pitch()*RAD_TO_DEG*DEG_TO_CD,0.0f);
+        float wind_down_throttle = _wind_down_throttle_start * 
+            (1.0f - (float(millis() - _wind_down_start_ms)/1000.0f/_wind_down_decay_time_s));
+        wind_down_throttle = MAX(wind_down_throttle,0.0f);
+        attitude_control->set_throttle_out(wind_down_throttle, false, g.throttle_filt);
+        if (wind_down_throttle < FLT_EPSILON) {_flags.THROTTLE_WOUND_DOWN = true;} 
+        else {_flags.THROTTLE_WOUND_DOWN = false;}
+        // attitude_control->relax_attitude_controllers();
+        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(
+            ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
+            ahrs.get_pitch()*RAD_TO_DEG*DEG_TO_CD, // current pitch
+            0.0f // zero yaw rate
+        ); // might not be needed. or might need to change to target a specific yaw...
+
+        lasmData data;
+        data.thr = wind_down_throttle;
+        data.rol = ahrs.get_roll()*RAD_TO_DEG;
+        data.pit = ahrs.get_pitch()*RAD_TO_DEG;
+        logLasm(data);
+        break;}
+    default:{
+        break;}
+    }
+    return status;
+}
+
+ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::Vegetable;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Vegetable state");
+        _crash_check_enabled = false;
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::SHUT_DOWN);
+        _docked_position_NED_m = _cur_pos_NED_m;
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::WindUp);}
+        // TODO add falling check
+        // else {}
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        lasmData data;
+        logLasm(data);
+        
+        break;}
+    default:{
+        break;}
+    }
+    return status;
+}
+
+ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::WindUp;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindUp state");
+        _crash_check_enabled = false;
+        _is_taking_off = true;
+        set_land_complete(false);
+        attitude_control->reset_rate_controller_I_terms();
+        attitude_control->reset_target_and_rate();
+        _wind_up_start_ms = millis();
+        attitude_control->set_throttle_out(0.0f, false, 0.0f); // Start at zero throttle
+        _thro_pitch_pid.reset_filter();
+        _thro_pitch_pid.reset_I();
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        _is_taking_off = false;
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.VEHICLE_STATIONARY && _flags.AT_WIND_UP_PITCH) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
+        else if (_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::WindDown);} 
+        else {
+            float vel_ms = _velocity_NED_m.length();
+            float pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
+            if (millis()-_last_send_windup > _log_period_ms) {
+                GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "vel m/s: %.4f pitch deg: %.4f", vel_ms, pitch_deg); // TODO remove or rate limit
+                _last_send_windup = millis();
+            }
+        }
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        float throttle = 0.0f;
+        if (motors->get_spool_state() != AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
+            // // motors have not completed spool up yet so relax navigation and position controllers
+            // pos_control->relax_velocity_controller_xy();
+            // pos_control->update_xy_controller();
+            // pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
+            // pos_control->update_z_controller();
+            // attitude_control->reset_yaw_target_and_rate();
+            // attitude_control->reset_rate_controller_I_terms();
+            // attitude_control->input_thrust_vector_rate_heading(pos_control->get_thrust_vector(), 0.0f);
+        } else { // Motors are spooled up
+            // // now pitch is controlled by throttle, not just the relationship between motors, we need to use throttle to control pitch
+            // throttle = attitude_control->get_throttle_in();
+            // float current_pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
+            // float pitch_err = _wind_up_pitch_deg - current_pitch_deg;
+            // // Compute throttle adjustment using PID
+            // // Negative pitch needs more throttle, positive pitch needs less
+            // // Throttle is between 0 and 1
+            // // in 1 second, the max throttle we should go up is 10%
+            // // at worst case, pitch will be -90 (unlikely)
+            // float throttle_correction = pitch_err*THROTTLE_PITCH_CONTROL_GAIN;
+            // throttle_correction = constrain_float(throttle_correction, -MAX_THROTTLE_CORRECTION * G_Dt, MAX_THROTTLE_CORRECTION * G_Dt);
+            // throttle = throttle - throttle_correction; 
+            // throttle = constrain_float(throttle, 0.0f, 1.0f);
+
+            // Compute throttle adjustment using PID
+            float current_pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
+            throttle = -_thro_pitch_pid.update_all(_wind_up_pitch_deg, current_pitch_deg, G_Dt);
+            throttle = constrain_float(throttle, 0.0f, 1.0f);
+
+            // float last_throttle = attitude_control->get_throttle_in();
+            // float throttle_change = throttle-last_throttle;
+            // if (throttle_change < -MAX_THROTTLE_CORRECTION * G_Dt) {
+            //     throttle = last_throttle + -MAX_THROTTLE_CORRECTION * G_Dt;
+            // } else if  (throttle_change > MAX_THROTTLE_CORRECTION * G_Dt) {
+            //     throttle = last_throttle + MAX_THROTTLE_CORRECTION * G_Dt;
+            // }
+            
+            attitude_control->set_throttle_out(throttle, false, 0.0f);
+            // attitude_control->relax_attitude_controllers();
+            attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(
+                ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
+                current_pitch_deg*DEG_TO_CD, // current pitch
+                0.0f // zero yaw rate
+            ); // might not be needed. or might need to change to target a specific yaw...
+        }
+
+        lasmData data;
+        data.thr = throttle;
+        data.rol = ahrs.get_roll()*RAD_TO_DEG;
+        data.pit = ahrs.get_pitch()*RAD_TO_DEG;
+        logLasm(data);
+
+        break;}
+    default:{
+        break;}
+    }
+    return status;
+}
+
+ModeLoiterAssisted::Status ModeLoiterAssisted::CoastOut(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::CoastOut;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastOut state");
+        _crash_check_enabled = true;
+        
+        #if AP_DDS_ENABLED
+        // AP_DDS publish detach message
+        AP_DDS_Client::need_to_pub_attach_detach = true;
+        AP_DDS_Client::desire_attach = false;
+        #endif
+        gcs().send_named_float("attach", 0.0f);
+        pos_control->init_xy_controller();
+        pos_control->init_z_controller();   
+        
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.BEYOND_COAST_OUT_DIST) {status = TRAN(&ModeLoiterAssisted::Recover);}
+        // else {}
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
+        pos_control->update_z_controller();
+        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _wind_up_pitch_deg*DEG_TO_CD, 0.0f);
+
+        lasmData data;
+        data.pit = _wind_up_pitch_deg;
+        logLasm(data);
+
+        break;}
+    default:{
+        break;}
+    }
+    return status;
+}
+
+ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
+    Status status = Status::HANDLED_STATUS;
+    // Transitions
+    switch (e) {
+    case Event::ENTRY_SIG:{
+        _lass_state_name = StateName::Recover;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Recover state");
+        _crash_check_enabled = true;
+        // If no recovery pos exists, set one 2 meters back and .5 meter up?
+        if (is_zero(_recovery_position_NED_m.x) && is_zero(_recovery_position_NED_m.y) && is_zero(_recovery_position_NED_m.z)) {
+            Vector2f unit_heading_vec{1.0f,0.0f};
+            unit_heading_vec.rotate(ahrs.get_yaw());
+            _recovery_position_NED_m.xy() = _cur_pos_NED_m.xy() - unit_heading_vec * BACKUP_RECOVERY_DIST_BACK_M;
+            _recovery_position_NED_m.z = _cur_pos_NED_m.z - BACKUP_RECOVERY_DIST_UP_M; // subtract because NED not NEU!
+        }
+        
+        break;}
+    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        
+        break;}
+    case Event::EVALUATE_TRANSITIONS:{
+        if (_flags.AT_RECOVERY_POSITION) {status = TRAN(&ModeLoiterAssisted::Lass);}
+        // else {}
+        break;}
+    case Event::RUN_FLIGHT_CODE:{
+        // Flight Code
+        pos_control->set_pos_target_xy_cm(_recovery_position_NED_m.x*M_TO_CM, _recovery_position_NED_m.y*M_TO_CM);
+        pos_control->set_pos_target_z_cm(-_recovery_position_NED_m.z*M_TO_CM); // negative to convert NED to NEU
+
+        // run position controllers
+        pos_control->update_xy_controller();
+        pos_control->update_z_controller();
+
+        // call attitude controller with auto yaw
+        attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), ahrs.get_yaw()*RAD_TO_DEG*DEG_TO_CD);
+        
+        lasmData data;
+        data.tpX = _recovery_position_NED_m.x,
+        data.tpY = _recovery_position_NED_m.y,
+        data.tpZ = _recovery_position_NED_m.z,
+        data.hdg = ahrs.get_yaw()*RAD_TO_DEG;
+        logLasm(data);
+
+        break;}
+    default:{
+        break;}
+    }
+    return status;
+}
+
+
+/*---------------------------------------------------------------------------*/
+/* Finite State Machine facilities... */
+void ModeLoiterAssisted::evaluate_transitions() {
+    Status status = Status::HANDLED_STATUS;
+    StateHandler prev_state = _lass_state; /* save for later */
+
+    status = (this->*_lass_state)(Event::EVALUATE_TRANSITIONS);
+
+    if (status == Status::TRAN_STATUS) { /* transition taken? */
+        (this->*prev_state)(Event::EXIT_SIG);
+        (this->*_lass_state)(Event::ENTRY_SIG);
+    }
+}
+
+void ModeLoiterAssisted::runFlightCode() {
+    Status status = (this->*_lass_state)(Event::RUN_FLIGHT_CODE);
+    // We can do something with status if we need to now
+    if (status == Status::TRAN_STATUS) {
+        //ignore for now
+    }
+}
+
+
+
+
+/*..........................................................................*/
+/* Helper Functions... */
+void ModeLoiterAssisted::findDockTarget(){
+    Vector2f dock_normal_vec;
+    Vector2f cfit_center_xy_m;
+    _flags.DOCK_FOUND = false; 
+
+    if (!g2.proximity.curvefit->get_target(dock_normal_vec, cfit_center_xy_m)) {return;} // return if we don't find an obstacle
+    _flags.DOCK_FOUND = true;
+
+    if (!is_equal(cfit_center_xy_m.x,_last_cfit_center_xy_m_x) || !is_equal(cfit_center_xy_m.y,_last_cfit_center_xy_m_y)){ // when new lidar data comes in
+        _flags.DOCK_STABLE = false;
+        _flags.HEADING_NORMAL_ALIGNED = false;
+        // Filter and evaluate dock center position
+        _last_cfit_center_xy_m_x = cfit_center_xy_m.x;
+        _last_cfit_center_xy_m_y = cfit_center_xy_m.y;
+        float x = cfit_center_xy_m.x;
+        float y = cfit_center_xy_m.y;
+        float z = _cur_pos_NED_m.z;
+        const Vector3f dock_pos{x,y,z};
+        _filt_dock_xyz_NEU_m = _dock_pos_filter.apply(dock_pos); // low pass filter on dock position
+        Vector3f dock_target_var_vec;
+        if (_dock_target_window_var.apply(dock_pos, dock_target_var_vec)) { // keep track of variance (deviation) of center
+            _dock_target_var = dock_target_var_vec.length();
+            if (_dock_target_var < _wv_thresh.get()) {
+                _flags.DOCK_STABLE = true;
+            } else {
+                _flags.DOCK_STABLE = false;
+            }
+        }
+        // Filter and evaluate dock normal vector
+        _filt_dock_normal_NEU = _dock_norm_filter.apply(dock_normal_vec);
+        _heading_normal_error_deg = wrap_PI(ahrs.get_yaw() - _filt_dock_normal_NEU.angle() + float(M_PI))*RAD_TO_DEG;
+        if (abs(_heading_normal_error_deg) < HEADING_NORMAL_TOL_DEG) {
+            _flags.HEADING_NORMAL_ALIGNED = true;
+        } else {
+            _flags.HEADING_NORMAL_ALIGNED = false;
+        }
+    }
+}
+
+void ModeLoiterAssisted::attach() { // init attach engaged via RC_Channel
+    _flags.ATTACH_BUTTON_PRESSED = true;
+    _flags.DETACH_BUTTON_PRESSED = false; // These are currently mapped to the same button, they could be mapped so seperate buttons in future
+}
+
+void ModeLoiterAssisted::detach() { // init detach engaged via RC_Channel
+    _flags.ATTACH_BUTTON_PRESSED = false;
+    _flags.DETACH_BUTTON_PRESSED = true;
+}
+
+void ModeLoiterAssisted::set_attached_status(float att_st) { // start being attached
+    _flags.ATTACHED = !is_zero(att_st);
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO,"Attached Status: %d\n", _flags.ATTACHED);
+    _last_att_st_time = millis();
+    _flags.DOCK_COMMS_HEALTHY = true;
+}
+
+void ModeLoiterAssisted::checkDockComms() {
+    if (millis() - _last_att_st_time > DOCK_COMMS_PERIOD_MS) {
+        _flags.DOCK_COMMS_HEALTHY = false;
+    }
+}
+
+// This function interprets what the pilot is attempting, and returns feedback
+void ModeLoiterAssisted::sendFlagFeedback() { 
+    // if (_flags.ATTACH_BUTTON_PRESSED) { // Pilot wants to engage docking mode
+    //     if (!_flags.DOCK_STABLE) {
+
+    //     }
     // }
+}
+
+void ModeLoiterAssisted::logLass() { 
+    // convert flags to bitmask
+    uint16_t flags_bitmask = 0;
+    flags_bitmask |= (_flags.DOCK_FOUND           ? 1 : 0) << 0;
+    flags_bitmask |= (_flags.DOCK_STABLE          ? 1 : 0) << 1;
+    flags_bitmask |= (_flags.WITHIN_COAST_IN_DIST     ? 1 : 0) << 2;
+    flags_bitmask |= (_flags.ATTACHED             ? 1 : 0) << 3;
+    flags_bitmask |= (_flags.VEHICLE_STATIONARY     ? 1 : 0) << 4;
+    flags_bitmask |= (_flags.ATTACH_BUTTON_PRESSED ? 1 : 0) << 5;
+    flags_bitmask |= (_flags.AT_RECOVERY_POSITION ? 1 : 0) << 6;
+    flags_bitmask |= (_flags.BEYOND_COAST_OUT_DIST ? 1 : 0) << 7;
+    flags_bitmask |= (_flags.THROTTLE_WOUND_DOWN ? 1 : 0) << 8;
+    flags_bitmask |= (_flags.AT_WIND_UP_PITCH ? 1 : 0) << 9;
+    flags_bitmask |= (_flags.HEADING_NORMAL_ALIGNED ? 1 : 0) << 10;
+    flags_bitmask |= (_flags.DETACH_BUTTON_PRESSED ? 1 : 0) << 11;
+    flags_bitmask |= (_flags.DOCK_COMMS_HEALTHY ? 1 : 0) << 12;
+
+    if (millis()-_last_lass_log_time > _log_period_ms) {
+        AP::logger().Write(
+        "LASS", // heading name
+        "TimeUS,dockX,dockY,dockN,state,flags,spd", // field labels
+        "smmd--n", // units
+        "F000--0", // mults
+        "QfffBHf", // format
+        AP_HAL::micros64(),
+        _filt_dock_xyz_NEU_m.x,
+        _filt_dock_xyz_NEU_m.y,
+        _filt_dock_normal_NEU.angle(),
+        uint8_t(_lass_state_name),
+        flags_bitmask,
+        _velocity_NED_m.length()
+        );
+        _last_lass_log_time = millis();
+    }
+}
+
+void ModeLoiterAssisted::logLasm(const lasmData &data) { 
+    if (millis()-_last_lasm_log_time > _log_period_ms) {
+        AP::logger().Write(
+            "LASM", // heading name
+            "TimeUS,tpX,tpY,tpZ,tvX,tvY,tvZ,rol,pit,hdg,thr,dss,ss", // field labels
+            "smmmnnnddd---", // units
+            "F000000000000", // mults
+            "QffffffffffBB", // format
+            AP_HAL::micros64(),
+            data.tpX, // cmded x position NEU m
+            data.tpY, // cmded y position NEU m
+            data.tpZ, // cmded z position NEU m
+            data.tvX, // cmded x velocity NEU m/s
+            data.tvY, // cmded y velocity NEU m/s
+            data.tvZ, // cmded z velocity NEU m/s
+            data.rol, // cmded roll deg 
+            data.pit, // cmded pitch deg
+            data.hdg, // cmded yaw deg
+            data.thr, // cmded throttle unitless
+            uint8_t(motors->get_desired_spool_state()), //desired spool state
+            uint8_t(motors->get_spool_state()) //spool state
+        );
+        _last_lasm_log_time = millis();
+    }
+}
+
+// Note: This function doesn't evaluate all flags
+void ModeLoiterAssisted::evaluateFlags() { // ALL FLAGS MUST BE SET TO FALSE INITIALLY!
+    _flags.WITHIN_COAST_IN_DIST = false;
+    _flags.AT_RECOVERY_POSITION = false;
+    _flags.BEYOND_COAST_OUT_DIST = false;
+    _flags.VEHICLE_STATIONARY = false;
+    _flags.AT_WIND_UP_PITCH = false;
+
+    // Check if we are at the recovery position
+    float dist_to_recovery_pos_cm = (_recovery_position_NED_m-_cur_pos_NED_m).length()*M_TO_CM;
+    if (dist_to_recovery_pos_cm < RECOVERY_DIST_THRESH_CM) {
+        _flags.AT_RECOVERY_POSITION = true;
+    }
+
+    // Check if we are beyond the coast out distance
+    float dist_from_docked_pos_cm = (_docked_position_NED_m.xy()-_cur_pos_NED_m.xy()).length()*M_TO_CM;
+    if (dist_from_docked_pos_cm > COAST_OUT_DIST_CM) {
+        _flags.BEYOND_COAST_OUT_DIST = true;
+    }
+
+    // Check if we are within the coast in distance
+    if (_flags.DOCK_FOUND) { 
+        _dist_to_dock_cm = (_filt_dock_xyz_NEU_m.xy()-_cur_pos_NED_m.xy()).length()*M_TO_CM;
+        if (_dist_to_dock_cm < _coast_in_dist_cm.get()) {
+            _flags.WITHIN_COAST_IN_DIST = true;
+        }
+    }
+    
+    // Check if we are stationary
+    _flags.VEHICLE_STATIONARY = (_velocity_NED_m.length() <= _stationary_vel_m_s.get());
+
+    // Check if we are at the wind up pitch
+    _flags.AT_WIND_UP_PITCH = abs(ahrs.get_pitch()*RAD_TO_DEG - _wind_up_pitch_deg) < WIND_UP_PITCH_TOL_DEG;
+}
+
+void ModeLoiterAssisted::abortExit() {
+    GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"Abort Exiting LASS");
+    if (!copter.set_mode(copter.prev_control_mode, ModeReason::UNKNOWN)) {
+        // this should never happen but just in case
+        copter.set_mode(Mode::Number::STABILIZE, ModeReason::UNKNOWN);
+    }
+}
+
+// must be unset on exit of state! Must never be called twice in a row! Don't want to overwrite originals
+void ModeLoiterAssisted::set_attitude_control_rate_limits(float limit_deg_s) {
+    _original_roll_limit = attitude_control->get_ang_vel_roll_max_degs();
+    _original_pitch_limit = attitude_control->get_ang_vel_pitch_max_degs();
+    _original_yaw_limit = attitude_control->get_ang_vel_yaw_max_degs();
+    attitude_control->set_ang_vel_roll_max_degs(limit_deg_s);
+    attitude_control->set_ang_vel_pitch_max_degs(limit_deg_s);
+    attitude_control->set_ang_vel_yaw_max_degs(limit_deg_s);
+}
+
+void ModeLoiterAssisted::unset_attitude_control_rate_limits() {
+    attitude_control->set_ang_vel_roll_max_degs(_original_roll_limit);
+    attitude_control->set_ang_vel_pitch_max_degs(_original_pitch_limit);
+    attitude_control->set_ang_vel_yaw_max_degs(_original_yaw_limit);
+}
 
 
-    float target_roll, target_pitch;
-    float target_yaw_rate = 0.0f;
-    float target_climb_rate = 0.0f;
-    float dt = G_Dt;
+void ModeLoiterAssisted::InitFilters() {
+    _dock_pos_filter.set_cutoff_frequency(_dock_pos_filt_hz.get()); 
+    _dock_norm_filter.set_cutoff_frequency(_dock_pos_filt_hz.get()); 
+    _dock_target_window_var = WindowVar(_wv_window_size.get()); // reinit with new min samples
+    _yaw_buf = ModeLoiterAssisted::YawBuffer(); // reinit yaw buffer
+}
 
+void ModeLoiterAssisted::updateFilterParams() {
     // check for filter change
-    if (!is_equal(_yaw_filter.get_cutoff_freq(), _yaw_hz.get())) {
-        _yaw_filter.set_cutoff_frequency(_yaw_hz.get());
+    if (!is_equal(_dock_pos_filter.get_cutoff_freq(), _dock_pos_filt_hz.get())) { // TODO update to dock_hz
+        _dock_pos_filter.set_cutoff_frequency(_dock_pos_filt_hz.get());
     }
-    if (!is_equal(_dist_filter.get_cutoff_freq(), _dist_filt_hz.get())) {
-        _dist_filter.set_cutoff_frequency(_dist_filt_hz.get());
-    }
-    if (!is_equal(_dock_pos_filter.get_cutoff_freq(), _pos_filt_hz.get())) { // TODO update to dock_hz
-        _dock_pos_filter.set_cutoff_frequency(_pos_filt_hz.get());
+    if (!is_equal(_dock_norm_filter.get_cutoff_freq(), _dock_pos_filt_hz.get())) { // TODO update to dock_hz
+        _dock_norm_filter.set_cutoff_frequency(_dock_pos_filt_hz.get());
     }
     if (!is_equal(_dock_target_window_var.get_window_size(), _wv_window_size.get())) {
         _dock_target_window_var.set_new_window_size(_wv_window_size.get());
     }
 
-    // set vertical speed and acceleration limits
-    pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
-
-    // process pilot inputs unless we are in radio failsafe
-    if (!copter.failsafe.radio) {
-        // apply SIMPLE mode transform to pilot inputs
-        // update_simple_mode(); //Disable simple mode
-
-        // convert pilot input to lean angles
-        get_pilot_desired_lean_angles(target_roll, target_pitch, loiter_nav->get_angle_max_cd(), attitude_control->get_althold_lean_angle_max_cd());
-
-        // process pilot's roll and pitch input
-        loiter_nav->set_pilot_desired_acceleration(target_roll, target_pitch);
-
-        // get pilot's desired yaw rate
-        target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->norm_input_dz());
-
-        // get pilot desired climb rate
-        target_climb_rate = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
-        target_climb_rate = constrain_float(target_climb_rate, -get_pilot_speed_dn(), g.pilot_speed_up);
-    } else {
-        // clear out pilot desired acceleration in case radio failsafe event occurs and we do not switch to RTL for some reason
-        loiter_nav->clear_pilot_desired_acceleration();
-    }
-
-    // relax loiter target if we might be landed
-    if (copter.ap.land_complete_maybe) {
-        loiter_nav->soften_for_landing();
-    }
-
-    // Loiter State Machine Determination
-    AltHoldModeState loiter_state = get_alt_hold_state(target_climb_rate);
-
-    // Loiter State Machine
-    switch (loiter_state) {
-        case AltHoldModeState::MotorStopped:
-            attitude_control->reset_rate_controller_I_terms();
-            attitude_control->reset_yaw_target_and_rate();
-            pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
-            loiter_nav->init_target();
-            attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
-            _target_acquired = false;
-            break;
-
-        case AltHoldModeState::Landed_Ground_Idle:
-            attitude_control->reset_yaw_target_and_rate();
-            FALLTHROUGH;
-
-        case AltHoldModeState::Landed_Pre_Takeoff:
-            attitude_control->reset_rate_controller_I_terms_smoothly();
-            loiter_nav->init_target();
-            attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
-            pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
-            _target_acquired = false;
-            break;
-
-        case AltHoldModeState::Takeoff:
-            // initiate take-off
-            if (!takeoff.running()) {
-                takeoff.start(constrain_float(g.pilot_takeoff_alt,0.0f,1000.0f));
-            }
-            // get avoidance adjusted climb rate
-            target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
-            // set position controller targets adjusted for pilot input
-            takeoff.do_pilot_takeoff(target_climb_rate);
-            // run loiter controller
-            loiter_nav->update();
-            // call attitude controller
-            attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
-            _target_acquired = false;
-            break;
-
-        case AltHoldModeState::Flying: {
-            // set motors to full range
-            motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
-
-            // Get Yaw angle and distance to closest object from AP_Proximity
-            float surface_heading_rad;
-            float surface_distance_m;
-            Vector2f surface_tangent_vec; 
-            Vector2f surface_normal_vec;
-            Vector2f cfit_center_xy_m;
-
-            bool found_obstacle = g2.proximity.curvefit->get_target(surface_heading_rad, surface_distance_m, surface_tangent_vec, surface_normal_vec, cfit_center_xy_m);
-
-            if (found_obstacle) { // only perform obstacle stuff when obstacles are in, otherwise do regular loiter
-                float heading_to_obs_deg = wrap_180(surface_heading_rad*RAD_TO_DEG);
-                float dist_to_obs_m = surface_distance_m;
-
-                if(!_target_acquired){// Reacquired target so reset yaw. TODO manage this state better
-                    _distance_target_cm = dist_to_obs_m * 100.0;
-                    _target_acquired = true; //TODO control this more clearly
-                    _yaw_filter.reset();
-                    _dist_filter.reset();
-                    _dock_pos_filter.reset();
-                    _dock_target_window_var.reset();
-                }
-
-                if (!ahrs.get_relative_position_NED_origin(_current_vehicle_position)){
-                    GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"No pos estimate!");
-                    return; // TODO: What do we even do here? Switch to stabilize?
-                }
-
-                if (!is_equal(cfit_center_xy_m.x,_last_cfit_center_xy_m_x) || !is_equal(cfit_center_xy_m.y,_last_cfit_center_xy_m_y)){ // when new lidar data comes in
-                    _last_cfit_center_xy_m_x = cfit_center_xy_m.x;
-                    _last_cfit_center_xy_m_y = cfit_center_xy_m.y;
-
-                    // Start tracking global position of nearest point
-                    float x = cfit_center_xy_m.x;
-                    float y = cfit_center_xy_m.y;
-                    float z = _current_vehicle_position.z;
-                    const Vector3f dock_pos{x,y,z};
-
-                    _filt_dock_xyz_NEU_m = _dock_pos_filter.apply(dock_pos); // this is currently filtering something that is already filtered by curvefit (TODO Fix)
-                    
-                    _ready_to_dock = false;
-                    Vector3f dock_target_var;
-                    if (_dock_target_window_var.apply(dock_pos, dock_target_var)) {
-                        if (dock_target_var.length() < _wv_thresh.get()) {
-                            _ready_to_dock = true;
-                        }
-                    }
-                }
-
-                float filt_heading_cmd_deg = _yaw_filter.apply(heading_to_obs_deg);
-                float filt_dist_to_obs_m = _dist_filter.apply(dist_to_obs_m);
-    
-
-                Vector2f vec_to_target_2d_m = _filt_dock_xyz_NEU_m.xy() - _current_vehicle_position.xy();
-
-                // Update target information for attach()
-                if (!_lock_commands){
-                    _xy_vel_cms = vec_to_target_2d_m.normalized()*_dock_speed_cms.get();
-                    _bearing_cd = get_bearing_cd(_current_vehicle_position.xy(), _filt_dock_xyz_NEU_m.xy());
-                }
-                Vector2f reverse_vel = _xy_vel_cms.normalized()*-_undock_speed_cms.get();
-                float reverse_vel_z = ((0.0<_z_vel)-(_z_vel<0.0))*-_undock_speed_cms.get();
-
-                if (millis()-_last_log_time > 100) {
-                    AP::logger().Write("LASS","TimeUS,targX,targY,velX,velY,Dkg","smmnn-","F0000-","QffffB",
-                    AP_HAL::micros64(),
-                    _filt_dock_xyz_NEU_m.x,
-                    _filt_dock_xyz_NEU_m.y,
-                    _xy_vel_cms.x,
-                    _xy_vel_cms.y,
-                    uint8_t(_lock_commands)
-                    );
-                    _last_log_time = millis();
-                }
-                
-
-                // Docking state controller
-                switch (_docking_state){
-                    case DockingState::ATTACH_MANEUVER: {
-                        // // pos_control->input_vel_accel_xy(_xy_vel_cms, _xy_accel);
-                        // // pos_control->input_vel_accel_z(_z_vel, _z_accel);
-                        // pos_control->set_vel_desired_xy_cms(_xy_vel_cms);
-                        // // pos_control->set_accel_desired_xy_cmss(_xy_accel);
-                        // pos_control->set_vel_desired_z_cms(_z_vel);
-                        filt_heading_cmd_deg = wrap_180(_bearing_cd/100.0f);
-                        // integrate current pos to new target pos
-                        Vector2f target_xy_NEU_cm = pos_control->get_pos_target_cm().tofloat().xy() + _xy_vel_cms*dt;
-                        pos_control->set_pos_target_xy_cm(target_xy_NEU_cm.x, target_xy_NEU_cm.y);
-
-                        if(ModeLoiterAssisted::attached_state) { //signal from sensor
-                            attached();
-                        }
-                        break;
-                    }
-
-                    case DockingState::DETACH_MANEUVER:
-                        pos_control->input_vel_accel_xy(reverse_vel, _xy_accel); // back up the way we came in
-                        pos_control->input_vel_accel_z(reverse_vel_z, _z_accel);
-                        if (filt_dist_to_obs_m * 100.0 >= _min_obs_dist_cm.get()) {
-                            init(false); //reinitialize loiter controller
-                        }
-                        break;
-
-                    case DockingState::ATTACHED:
-                        if(!ModeLoiterAssisted::attached_state) { //this is bad news if we become unattached without manually unattaching!
-                            GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY, "Unexpected detach!");
-                            _docking_state = DockingState::DETACH_MANEUVER;
-                        }
-                        pos_control->relax_velocity_controller_xy();
-                        pos_control->relax_z_controller(0.0f);
-                        return;
-                        break;
-
-                    case DockingState::NOT_DOCKING:
-                        FALLTHROUGH;
-
-                    default:
-                        // get estimated dt (rate at which this loop runs)
-                        uint32_t dt_meas = millis()-_last_millis;
-                        _last_millis = millis();
-                        if (dt_meas) {
-
-                        };
-                        // float dt = 1;
-
-                        // xy pos control ==============
-                        Vector2f target_xy_body_vel_cms = get_pilot_desired_velocity_xy(_vel_max_cms.get());
-                        Vector2f target_xy_NEU_vel_cms = target_xy_body_vel_cms;
-                        target_xy_NEU_vel_cms.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
-
-                        // integrate current pos to new target pos
-                        Vector2f target_xy_NEU_cm = pos_control->get_pos_target_cm().tofloat().xy() + target_xy_NEU_vel_cms*dt;
-                        
-                        // check if target pos is too close to obstacle
-                        Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NEU_cm;
-                        float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
-                        if (target_to_dock_dist_cm < _min_obs_dist_cm.get()) {
-                            // if too close, adjust to nearest pos that fits min distance condition
-                            Vector2f min_dist_correction_vec_cm = target_to_dock_vec_cm.normalized()*abs(target_to_dock_dist_cm-_min_obs_dist_cm.get());
-                            target_xy_NEU_cm -= min_dist_correction_vec_cm;
-                        }
-
-                        // // z pos control ==========================================
-                        // float target_z_body_vel_cms = target_climb_rate;
-                        // float target_z_NEU_vel_cms = target_z_body_vel_cms;
-                        // float target_z_NEU_cm = pos_control->get_pos_target_cm().tofloat().z + target_z_NEU_vel_cms*dt;
-
-                        // // send pos control to pos_control
-                        // Vector3f target_xyz_NEU_cm{target_xy_NEU_cm.x, target_xy_NEU_cm.y, target_z_NEU_cm};
-                        // pos_control->input_pos_xyz(target_xyz_NEU_cm.todouble(),0,0); // input pos target TODO read about other args (offset and buffer)
-                        
-                        // Vector2f target_vel = {0,0};
-                        // // fprintf(stderr, "Pos before: (%.1f, %.1f)",target_xy_NEU_cm.x,target_xy_NEU_cm.y);
-                        // Vector2p target_xy_NEU_cm_double = target_xy_NEU_cm.todouble();
-                        // pos_control->input_pos_vel_accel_xy(target_xy_NEU_cm_double, target_vel, Vector2f(0,0));
-                        
-                        pos_control->set_pos_target_xy_cm(target_xy_NEU_cm.x, target_xy_NEU_cm.y);
-                        // pos_control->set_pos_vel_accel_xy(target_xy_NEU_cm.todouble(), Vector2f(0,0), Vector2f(0,0));
-                        break;
-                }
-
-                // YAW CONTROLLER //
-                AC_AttitudeControl::HeadingCommand heading_cmd;
-                heading_cmd.heading_mode = AC_AttitudeControl::HeadingMode::Angle_Only;
-                heading_cmd.yaw_angle_cd = filt_heading_cmd_deg*100.0f;
-                heading_cmd.yaw_rate_cds = 0.0;
-                // END YAW CONTROLLER //
-
-                pos_control->update_xy_controller(); // run pos controller
-                // AUGMENT CONTROL //
-                // attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), auto_yaw.get_heading());
-                attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
-                // get avoidance adjusted climb rate
-                #if AP_RANGEFINDER_ENABLED
-                // update the vertical offset based on the surface measurement
-                copter.surface_tracking.update_surface_offset();
-                #endif
-                // Send the commanded climb rate to the position controller
-                pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
-                // END AUGMENT CONTROL //
-
-            } else { //default to normal loiter when no obstacles are detected
-                _target_acquired = false; // no target found
-                #if AC_PRECLAND_ENABLED
-                bool precision_loiter_old_state = _precision_loiter_active;
-                if (do_precision_loiter()) {
-                    precision_loiter_xy();
-                    _precision_loiter_active = true;
-                } else {
-                    _precision_loiter_active = false;
-                }
-                if (precision_loiter_old_state && !_precision_loiter_active) {
-                    // prec loiter was active, not any more, let's init again as user takes control
-                    loiter_nav->init_target();
-                }
-                // run loiter controller if we are not doing prec loiter
-                if (!_precision_loiter_active) {
-                    loiter_nav->update();
-                }
-                #else
-                loiter_nav->update();
-                #endif
-
-                // call attitude controller
-                attitude_control->input_thrust_vector_rate_heading(loiter_nav->get_thrust_vector(), target_yaw_rate, false);
-
-                // get avoidance adjusted climb rate
-                target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
-
-                #if AP_RANGEFINDER_ENABLED
-                // update the vertical offset based on the surface measurement
-                copter.surface_tracking.update_surface_offset();
-                #endif
-
-                // Send the commanded climb rate to the position controller
-                pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
-            }
-            break;}
-        default:
-            GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL,"Undefined Loiter State");
-            break;
-    }
-    // run the vertical position controller and set output throttle
-    pos_control->update_z_controller();
+    _thro_pitch_pid.set_kP(_thro_pitch_p.get());
+    _thro_pitch_pid.set_kI(_thro_pitch_i.get());
+    _thro_pitch_pid.set_kD(_thro_pitch_d.get());
+    _thro_pitch_pid.set_ff(_thro_pitch_ff.get());
+    _thro_pitch_pid.set_imax(_thro_pitch_imax.get());
+    _thro_pitch_pid.set_filt_E_hz(_thro_pitch_err_hz.get());
+    _thro_pitch_pid.set_filt_D_hz(_thro_pitch_d_hz.get());
 }
 
-uint32_t ModeLoiterAssisted::wp_distance() const
-{
-    return loiter_nav->get_distance_to_target();
-}
-
-int32_t ModeLoiterAssisted::wp_bearing() const
-{
-    return loiter_nav->get_bearing_to_target();
-}
+/*..........................................................................*/
+/*...........Window Var Functions............................*/
 
 bool ModeLoiterAssisted::WindowVar::apply(Vector3f value, Vector3f &current_variance) {
     // Add the new value to the window

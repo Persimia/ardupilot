@@ -281,9 +281,9 @@ void AP_Proximity::init()
     }
 
 #if AP_PROXIMITY_CURVEFIT_ENABLED
-        curvefit = NEW_NOTHROW AP_Proximity_CurveFit();
-        curvefit_var_info = curvefit->var_info;
-        AP_Param::load_object_from_eeprom(&curvefit,curvefit_var_info);
+    curvefit = NEW_NOTHROW AP_Proximity_CurveFit();
+    curvefit_var_info = curvefit->var_info;
+    AP_Param::load_object_from_eeprom(curvefit, curvefit_var_info);
 #endif
 
 }
