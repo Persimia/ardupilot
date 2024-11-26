@@ -51,20 +51,6 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("_RNGMAX", 5, AP_Proximity_CurveFit, _rng_max_m, 3),
 
-    // // @Param{Copter}: _LDR_HZ
-    // // @DisplayName: Lidar sweep rate in Hz
-    // // @Description: Lidar sweep rate in Hz
-    // // @Units: hz
-    // // @User: Advanced
-    // AP_GROUPINFO("_LDR_HZ", 6, AP_Proximity_CurveFit, _lidar_sweep_rate_hz, 3.73),
-
-    // // @Param{Copter}: _CNTR_HZ
-    // // @DisplayName: Center position cutoff filter hz
-    // // @Description: Center position cutoff filter hz
-    // // @Units: hz
-    // // @User: Advanced
-    // AP_GROUPINFO("_CNTR_HZ", 7, AP_Proximity_CurveFit, _center_filter_cutoff_hz, 1),
-
     AP_GROUPEND
 };
 
