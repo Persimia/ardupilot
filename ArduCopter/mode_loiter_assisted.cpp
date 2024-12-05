@@ -606,12 +606,13 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
             // }
             
             attitude_control->set_throttle_out(throttle, false, 0.0f);
-            // attitude_control->relax_attitude_controllers();
-            attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(
-                ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
-                current_pitch_deg*DEG_TO_CD, // current pitch
-                0.0f // zero yaw rate
-            ); // might not be needed. or might need to change to target a specific yaw...
+            attitude_control->relax_attitude_controllers();
+
+            // attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(
+            //     ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
+            //     current_pitch_deg*DEG_TO_CD, // current pitch
+            //     0.0f // zero yaw rate
+            // ); // might not be needed. or might need to change to target a specific yaw... removed because it affected the max throttle output we could get
         }
 
         lasmData data;
