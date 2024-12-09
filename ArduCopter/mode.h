@@ -1441,7 +1441,7 @@ private:
     float _dist_to_dock_cm;
     float _coast_in_pitch_cd;
     float _wind_down_throttle_start;
-    float _wind_down_decay_time_s = 3; // seconds from current throttle to zero in linear decay
+    float _wind_down_decay_time_s = 6; // seconds from current throttle to zero in linear decay. TODO make parameters
     uint32_t _wind_down_start_ms; // start of wind down maneuver
     uint32_t _wind_up_start_ms; // start of wind down maneuver
     uint32_t _log_period_ms = 100;

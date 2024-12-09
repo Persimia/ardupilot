@@ -1,0 +1,65 @@
+@startuml Lass State Machine
+
+hide empty description
+
+state ModeLoiterAssisted {
+    ' States
+    state "init()" as init
+    state "ModeLoiterAssisted" as mode_lass
+    state "Last Mode" as mode_last
+    state c <<choice>>
+
+    ' Transitions
+    [*] -[#black]-> init : set_mode()
+    init -[#black]-> c
+    c -[#black]-> mode_lass : if (AltHoldModeState::Flying || attached)
+    c -[#black]-> mode_last : else
+
+    ' -----------------------------------------
+    --
+
+    state "run()" as run{
+        ' States  ================================
+        state Lass
+        State AttachManeuver {
+            State LeadUp
+            State CoastIn
+            State WindDown
+        }
+        state Vegetable
+        State DetachManeuver {
+            State WindUp
+            State CoastOut
+            State Recover
+        }
+        State Default
+
+        ' Transitions ================================
+        [*] -[#black]-> Default
+        Default -[#black]-> Lass : DOCK_FOUND
+        Default -[#black]-> WindDown : ATTACHED
+        Lass -[#black]-> Default : !DOCK_FOUND
+        Lass -[#black]-> LeadUp : DOCKING_ENGAGED
+        Lass -[#black]-> WindDown : ATTACHED
+        LeadUp -[#black]-> CoastIn : WITHIN_COAST_IN_DIST
+        LeadUp -[#black]-> WindDown : ATTACHED
+        LeadUp -[#black]-> Lass : DETACH_BUTTON_PRESSED 
+        CoastIn -[#black]-> WindDown : ATTACHED
+        WindDown -[#black]-> Vegetable : WINDED_DOWN
+        Vegetable -[#black]-> WindUp : DETACH_BUTTON_PRESSED
+        WindUp -[#black]-> CoastOut : STABLE_AT_WIND_UP_PITCH
+        WindUp -[#black]-> WindDown : ATTACH_BUTTON_PRESSED
+        CoastOut -[#black]-> Recover : BEYOND_COAST_OUT_DIST
+        Recover -[#black]-> Lass : AT_RECOVERY_POSITION
+    }
+
+    State AbortExit
+
+    [*] -[#black]-> run : update_flight_mode()
+    run -[#black]-> [*] : lass_disengage
+    run -[#black]-> AbortExit : No Pos Estimate
+    AbortExit -[#black]-> [*]
+}
+
+@enduml
+' https://plantuml.com/state-diagram

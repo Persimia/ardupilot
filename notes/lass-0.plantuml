@@ -1,0 +1,32 @@
+@startuml Lass State Machine
+
+hide empty description
+
+state ModeLoiterAssisted {
+    ' States
+    state "init()" as init
+    state "ModeLoiterAssisted" as mode_lass
+    state "Last Mode" as mode_last
+    state c <<choice>>
+
+    ' Transitions
+    [*] -[#black]-> init : set_mode()
+    init -[#black]-> c
+    c -[#black]-> mode_lass : if (AltHoldModeState::Flying || attached)
+    c -[#black]-> mode_last : else
+
+    ' -----------------------------------------
+    ||
+
+    state "run()" as run
+
+    State AbortExit
+
+    [*] -[#black]-> run : update_flight_mode()
+    run -[#black]-> [*] : lass_disengage
+    run -[#black]-> AbortExit : No Pos Estimate
+    AbortExit -[#black]-> [*]
+}
+
+@enduml
+' https://plantuml.com/state-diagram

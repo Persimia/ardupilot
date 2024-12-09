@@ -1,0 +1,45 @@
+@startuml Lass State Machine
+
+hide empty description
+
+top to bottom direction
+
+' States  ================================
+state Lass
+State AttachManeuver {
+    State LeadUp
+    State CoastIn
+    State WindDown
+}
+state Vegetable
+State DetachManeuver {
+    State WindUp
+    State CoastOut
+    State Recover
+}
+State Default
+
+' Standard Transitions ================================
+[*] -[#black]-> Default
+Default -[#black]-> Lass : DOCK_FOUND
+Lass -[#black]-> LeadUp : DOCKING_ENGAGED
+LeadUp -[#black]-> CoastIn : WITHIN_COAST_IN_DIST
+CoastIn -[#black]-> WindDown : ATTACHED
+WindDown -[#black]-> Vegetable : WINDED_DOWN
+Vegetable -[#black]-> WindUp : DETACH_BUTTON_PRESSED
+WindUp -[#black]-> CoastOut : STABLE_AT_WIND_UP_PITCH
+CoastOut -[#black]-> Recover : BEYOND_COAST_OUT_DIST
+Recover -[#black]-> Lass : AT_RECOVERY_POSITION
+
+
+' Early Attach Transition ================================
+' Default -[#black]-> WindDown : ATTACHED
+' Lass -[#black]-> WindDown : ATTACHED
+' LeadUp -[#black]-> WindDown : ATTACHED
+' Lass -[#black]-> Default : !DOCK_FOUND
+' LeadUp -[#black]-> Lass : DETACH_BUTTON_PRESSED 
+' WindUp -[#black]-> WindDown : ATTACH_BUTTON_PRESSED
+
+
+@enduml
+' https://plantuml.com/state-diagram
