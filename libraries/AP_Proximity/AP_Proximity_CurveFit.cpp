@@ -259,14 +259,14 @@ void AP_Proximity_CurveFit::truncate_data(Vector2f curr_pos)
     Vector2f normal_dir = (_points_NE_origin[closest_index]).normalized();
     // Check for discontinuity and truncate data 
     for(int i = closest_index; i < _read_end-1; i++){
-        if(normal_dir.dot(_points_NE_origin[i+1] - _points_NE_origin[i]) > _discontinuity_threshold.get()){
+        if(abs(normal_dir.dot(_points_NE_origin[i+1] - _points_NE_origin[i])) > _discontinuity_threshold.get()){
             _read_end = i+1;
             break;
         }
     }
     
     for(int i = closest_index; i > _read_start; i--){
-        if(normal_dir.dot(_points_NE_origin[i-1] - _points_NE_origin[i]) > _discontinuity_threshold.get()){
+        if(abs(normal_dir.dot(_points_NE_origin[i-1] - _points_NE_origin[i])) > _discontinuity_threshold.get()){
             _read_start = i;
             break;
         }
