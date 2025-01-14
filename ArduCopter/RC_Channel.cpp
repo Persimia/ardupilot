@@ -660,17 +660,17 @@ bool RC_Channel_Copter::do_aux_function(const AUX_FUNC ch_option, const AuxSwitc
 
 #if MODE_LOITER_ASSISTED_ENABLED == ENABLED
     case AUX_FUNC::LASS_ATTACH_DETACH:
-            if (copter.flightmode == &copter.mode_loiter_assisted) {
-                switch (ch_flag) {
-                case AuxSwitchPos::HIGH:
-                    copter.mode_loiter_assisted.attach();
-                    break;
-                default:
-                    copter.mode_loiter_assisted.detach();
-                    break;
-                }
-            }
+            // if (copter.flightmode == &copter.mode_loiter_assisted) {
+        switch (ch_flag) {
+        case AuxSwitchPos::HIGH:
+            copter.mode_loiter_assisted.attach();
             break;
+        default:
+            copter.mode_loiter_assisted.detach();
+            break;
+        }
+            // }
+        break;
 #endif
 
     default:
