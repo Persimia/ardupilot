@@ -3,11 +3,14 @@
 #include <AP_Proximity/AP_Proximity.h>
 #include <algorithm>
 #include <GCS_MAVLink/GCS.h>
+#include <tuple>
 
 
 #if AP_PROXIMITY_CURVEFIT_ENABLED
 #define LARGE_FLOAT 1.0e3
 #define QUANTIZATION 1.0E-3
+#define DEFAULT_TRUNCATION_DISTANCE_MULT 5
+#define DEFAULT_LIDAR_SCAN_PITCH_DEG 1.33
 
 const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Param{Copter}: _DISC
@@ -50,6 +53,19 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Units: m
     // @User: Advanced
     AP_GROUPINFO("_RNGMAX", 5, AP_Proximity_CurveFit, _rng_max_m, 3),
+
+    // @Param{Copter}: _TRNC_D_MULT
+    // @DisplayName: Proximity Curvefit Truncation distance cutoff
+    // @Description: Proximity Curvefit Truncation distance cutoff
+    // @User: Advanced
+    AP_GROUPINFO("_TRNC_M", 6, AP_Proximity_CurveFit, _truncation_distance_mult, DEFAULT_TRUNCATION_DISTANCE_MULT),
+
+    // @Param{Copter}: _SCN_PIT
+    // @DisplayName: Proximity Curvefit Scan pitch
+    // @Description: Proximity Curvefit Scan pitch (expected distance between measurements in degrees)
+    // @Units: m
+    // @User: Advanced
+    AP_GROUPINFO("_SCN_PIT", 7, AP_Proximity_CurveFit, _lidar_scan_pitch_deg, DEFAULT_LIDAR_SCAN_PITCH_DEG),
 
     AP_GROUPEND
 };
@@ -256,36 +272,46 @@ void AP_Proximity_CurveFit::truncate_data(Vector2f curr_pos)
     if (fit_num < 1){ return;} //No data
     
 
-    int closest_index = find_closest_index(curr_pos);
-    if (fit_num>3) {
-        int nearest_neighbor1 = closest_index+1;
-        int nearest_neighbor2 = closest_index-1;
-        if (nearest_neighbor1 > _read_end) {
-            nearest_neighbor1 = closest_index-2;
-        }
-        if (nearest_neighbor2 < _read_start) {
-            nearest_neighbor2 = closest_index+2;
-        }
-        float dist1 = (_points_NE_origin[closest_index]-_points_NE_origin[nearest_neighbor1]).length();
-        float dist2 = (_points_NE_origin[closest_index]-_points_NE_origin[nearest_neighbor2]).length();
-        float min_dist = std::min(dist1,dist2);
-
-        float dist_threshold = min_dist*5;
+    int closest_index;
+    float closest_distance;
+    find_closest_index(curr_pos, closest_index, closest_distance);
+    // if (fit_num>3) {
+    //     int nearest_neighbor1 = closest_index+1;
+    //     int nearest_neighbor2 = closest_index-1;
+    //     if (nearest_neighbor1 > _read_end) {
+    //         nearest_neighbor1 = closest_index-2;
+    //     }
+    //     if (nearest_neighbor2 < _read_start) {
+    //         nearest_neighbor2 = closest_index+2;
+    //     }
+    //     float dist1 = (_points_NE_origin[closest_index]-_points_NE_origin[nearest_neighbor1]).length();
+    //     float dist2 = (_points_NE_origin[closest_index]-_points_NE_origin[nearest_neighbor2]).length();
+    //     float min_dist = std::min(dist1,dist2);
 
         // Check for distance metric and truncate data 
         for(int i = closest_index; i < _read_end-1; i++){
-            if((_points_NE_origin[i+1]-_points_NE_origin[i]).length() > dist_threshold){
+            int num_away = i+1-closest_index;
+            float expected_dist1 = sinf(_lidar_scan_pitch_deg*num_away*DEG_TO_RAD)*closest_distance;
+            float expected_dist2 = sinf((_lidar_scan_pitch_deg*num_away-1)*DEG_TO_RAD)*closest_distance;
+            float truncation_distance_cutoff = abs(expected_dist1-expected_dist2); // This is the expected distance away if we were perpendicular to a flat wall
+            
+            if((_points_NE_origin[i+1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_mult){
                 _read_end = i+1;
                 break;
             }
         }
         for(int i = closest_index; i > _read_start; i--){
-            if((_points_NE_origin[i-1]-_points_NE_origin[i]).length() > dist_threshold){
+            int num_away = closest_index-i+1;
+            float expected_dist1 = sinf(_lidar_scan_pitch_deg*num_away*DEG_TO_RAD)*closest_distance;
+            float expected_dist2 = sinf((_lidar_scan_pitch_deg*num_away-1)*DEG_TO_RAD)*closest_distance;
+            float truncation_distance_cutoff = abs(expected_dist1-expected_dist2); // This is the expected distance away if we were perpendicular to a flat wall
+            
+            if((_points_NE_origin[i-1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_mult){
                 _read_start = i;
                 break;
             }
         }
-    }   
+    // }   
 
     // Vector2f normal_dir = (_points_NE_origin[closest_index]).normalized();
     // // Check for discontinuity and truncate data 
@@ -320,17 +346,16 @@ void AP_Proximity_CurveFit::compute_coefficients(AP_Proximity_CurveFit::Coeffici
     }
 }
 
-int AP_Proximity_CurveFit::find_closest_index(const Vector2f curr_pos){
-    float closest_distance = (_points_NE_origin[_read_start] - curr_pos).length_squared();
-    int closest_index = _read_start;
+void AP_Proximity_CurveFit::find_closest_index(const Vector2f curr_pos, int &closest_index, float &closest_distance){
+    closest_distance = (_points_NE_origin[_read_start] - curr_pos).length_squared();
+    closest_index = _read_start;
     for(int i=_read_start+1; i<_read_end; i++){
         float distance = (_points_NE_origin[i] - curr_pos).length_squared();
         if(distance < closest_distance){
             closest_index = i;
-            // closest_distance = distance;
+            closest_distance = distance;
         }
     }
-    return closest_index;
 }
 
 void AP_Proximity_CurveFit::reset()

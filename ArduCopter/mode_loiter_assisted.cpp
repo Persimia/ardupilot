@@ -432,18 +432,18 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
         
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        // if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
         if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);}
         else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
-        // pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
-        // pos_control->update_z_controller();
+        pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
+        pos_control->update_z_controller();
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _coast_in_pitch_cd, 0.0f);
 
-        float thr_out = throttle_hover();
-        attitude_control->set_throttle_out(thr_out, true, POSCONTROL_THROTTLE_CUTOFF_FREQ_HZ);
+        // float thr_out = throttle_hover();
+        // attitude_control->set_throttle_out(thr_out, true, POSCONTROL_THROTTLE_CUTOFF_FREQ_HZ);
 
         lasmData data;
         data.hdg = _locked_heading_deg;
@@ -660,11 +660,11 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastOut(const Event e) {
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
-        // pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
-        // pos_control->update_z_controller();
+        pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
+        pos_control->update_z_controller();
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _wind_up_pitch_deg*DEG_TO_CD, 0.0f);
-        float thr_out = throttle_hover();
-        attitude_control->set_throttle_out(thr_out, true, POSCONTROL_THROTTLE_CUTOFF_FREQ_HZ);
+        // float thr_out = throttle_hover();
+        // attitude_control->set_throttle_out(thr_out, true, POSCONTROL_THROTTLE_CUTOFF_FREQ_HZ);
 
         lasmData data;
         data.pit = _wind_up_pitch_deg;

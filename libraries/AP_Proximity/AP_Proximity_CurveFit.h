@@ -86,7 +86,7 @@ private:
         Vector2f& tangent_vec, Vector2f& normal_vec, Vector2f& center, 
         float& fit_quality);
 
-    int find_closest_index(const Vector2f curr_pos);
+    void find_closest_index(const Vector2f curr_pos, int &closest_index, float &closest_distance);
 
     Vector2f _points_NE_origin[2*CURVEFIT_DATA_LEN];
     int _read_start = 0;
@@ -115,8 +115,10 @@ private:
     AP_Float _angle_max_deg;
     AP_Float _rng_max_m;
     AP_Float _rng_min_m;
-    AP_Float _lidar_sweep_rate_hz;
-    AP_Float _center_filter_cutoff_hz;
+    // AP_Float _lidar_sweep_rate_hz;
+    // AP_Float _center_filter_cutoff_hz;
+    AP_Float _truncation_distance_mult;
+    AP_Float _lidar_scan_pitch_deg;
 
     float _fit_quality;
     int _fit_num;
