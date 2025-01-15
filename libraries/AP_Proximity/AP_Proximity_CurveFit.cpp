@@ -251,26 +251,57 @@ void AP_Proximity_CurveFit::add_point(float angle_deg, float distance)
 }
 
 void AP_Proximity_CurveFit::truncate_data(Vector2f curr_pos)
-{
-    if(_read_start == _read_end){ return;} //No data
+{   
+    int fit_num = _read_end - _read_start;
+    if (fit_num < 1){ return;} //No data
+    
 
     int closest_index = find_closest_index(curr_pos);
+    if (fit_num>3) {
+        int nearest_neighbor1 = closest_index+1;
+        int nearest_neighbor2 = closest_index-1;
+        if (nearest_neighbor1 > _read_end) {
+            nearest_neighbor1 = closest_index-2;
+        }
+        if (nearest_neighbor2 < _read_start) {
+            nearest_neighbor2 = closest_index+2;
+        }
+        float dist1 = (_points_NE_origin[closest_index]-_points_NE_origin[nearest_neighbor1]).length();
+        float dist2 = (_points_NE_origin[closest_index]-_points_NE_origin[nearest_neighbor2]).length();
+        float min_dist = std::min(dist1,dist2);
 
-    Vector2f normal_dir = (_points_NE_origin[closest_index]).normalized();
-    // Check for discontinuity and truncate data 
-    for(int i = closest_index; i < _read_end-1; i++){
-        if(abs(normal_dir.dot(_points_NE_origin[i+1] - _points_NE_origin[i])) > _discontinuity_threshold.get()){
-            _read_end = i+1;
-            break;
+        float dist_threshold = min_dist*5;
+
+        // Check for distance metric and truncate data 
+        for(int i = closest_index; i < _read_end-1; i++){
+            if((_points_NE_origin[i+1]-_points_NE_origin[i]).length() > dist_threshold){
+                _read_end = i+1;
+                break;
+            }
         }
-    }
+        for(int i = closest_index; i > _read_start; i--){
+            if((_points_NE_origin[i-1]-_points_NE_origin[i]).length() > dist_threshold){
+                _read_start = i;
+                break;
+            }
+        }
+    }   
+
+    // Vector2f normal_dir = (_points_NE_origin[closest_index]).normalized();
+    // // Check for discontinuity and truncate data 
+    // for(int i = closest_index; i < _read_end-1; i++){
+    //     if(abs(normal_dir.dot(_points_NE_origin[i+1] - _points_NE_origin[i])) > _discontinuity_threshold.get()){
+    //         _read_end = i+1;
+    //         break;
+    //     }
+    // }
     
-    for(int i = closest_index; i > _read_start; i--){
-        if(abs(normal_dir.dot(_points_NE_origin[i-1] - _points_NE_origin[i])) > _discontinuity_threshold.get()){
-            _read_start = i;
-            break;
-        }
-    }
+    // for(int i = closest_index; i > _read_start; i--){
+    //     if(abs(normal_dir.dot(_points_NE_origin[i-1] - _points_NE_origin[i])) > _discontinuity_threshold.get()){
+    //         _read_start = i;
+    //         break;
+    //     }
+    // }
     return;
 }
 
