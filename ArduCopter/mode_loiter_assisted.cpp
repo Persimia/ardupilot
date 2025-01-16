@@ -208,6 +208,7 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
 // should be called at 100hz or more
 void ModeLoiterAssisted::run()
 {
+    if (copter.failsafe.radio) {GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"Radio failsafe");}
     #if AP_DDS_ENABLED
     if (AP_DDS_Client::attached_state != _flags.ATTACHED) {
         set_attached_status(static_cast<float>(AP_DDS_Client::attached_state));
@@ -294,7 +295,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
         else if (_flags.ATTACH_BUTTON_PRESSED) {
             //Return why we are not switching to lead up
-            if (millis()-_last_send_lass > _log_period_ms) {
+            if (millis()-_last_send_lass > _statustext_period_ms) {
                 if (!_flags.DOCK_STABLE) {
                     GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Variance: %.4fm >= %.4fm", _dock_target_var, _wv_thresh.get());
                     _last_send_lass = millis();
@@ -563,7 +564,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         else {
             float vel_ms = _velocity_NED_m.length();
             float pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
-            if (millis()-_last_send_windup > _log_period_ms) {
+            if (millis()-_last_send_windup > _statustext_period_ms) {
                 GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "vel m/s: %.4f pitch deg: %.4f", vel_ms, pitch_deg); // TODO remove or rate limit
                 _last_send_windup = millis();
             }

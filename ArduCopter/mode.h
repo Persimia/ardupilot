@@ -1445,6 +1445,7 @@ private:
     uint32_t _wind_down_start_ms; // start of wind down maneuver
     uint32_t _wind_up_start_ms; // start of wind down maneuver
     uint32_t _log_period_ms = 100;
+    uint32_t _statustext_period_ms = 1000;
     Vector3f _recovery_position_NED_m; // Position where leadup state was entered 
     uint32_t _last_send_windup;
     Vector3f _docked_position_NED_m;
