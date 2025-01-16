@@ -710,7 +710,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
         
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.AT_RECOVERY_POSITION) {status = TRAN(&ModeLoiterAssisted::Lass);}
+        if (_flags.AT_RECOVERY_POSITION) {status = TRAN(&ModeLoiterAssisted::Default);}
         // else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
