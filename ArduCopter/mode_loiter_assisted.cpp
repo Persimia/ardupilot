@@ -44,6 +44,8 @@
 #define DEG_TO_CD                       100.0f // centidegrees per degree
 #define M_TO_CM                         100.0f // centimeters per meter
 
+#define DEFAULT_FAKE_TARGET_DISTANCE_M    2.0f //meters
+
 
 const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Param: VEL_MAX
@@ -161,6 +163,13 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("STAT_V", 17, ModeLoiterAssisted, _stationary_vel_m_s, DEFAULT_STATIONARY_VEL_M_S),
 
+    // @Param{Copter}: F_T_D
+    // @DisplayName: Fake target distance
+    // @Description: Fake target distance
+    // @Units: m
+    // @User: Advanced
+    AP_GROUPINFO("F_T_D", 18, ModeLoiterAssisted, _fake_target_distance_m, DEFAULT_FAKE_TARGET_DISTANCE_M),
+
     AP_GROUPEND
 };
 
@@ -223,7 +232,7 @@ void ModeLoiterAssisted::run()
 
     checkDockComms();
     updateFilterParams(); // Update filters (simply check for param changes)
-    findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
+    // findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
     evaluateFlags(); // evaluate some flags
     sendFlagFeedback(); // send pilot feedback on flags
     
@@ -248,8 +257,9 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Default(const Event e) {
         
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.DOCK_FOUND) {status = TRAN(&ModeLoiterAssisted::Lass);}
-        else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        // if (_flags.DOCK_FOUND) {status = TRAN(&ModeLoiterAssisted::Lass);}
+        // else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        if (_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::LeadUp);}
         else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
@@ -375,8 +385,9 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         gcs().send_named_float("attach", 1.0f);
         _crash_check_enabled = true;
         
-        
-        float heading_rad = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD*DEG_TO_RAD;
+        float heading_rad = ahrs.get_yaw();
+        _filt_dock_xyz_NEU_m.xy() = _cur_pos_NED_m.xy()+Vector2f(cosf(heading_rad),sinf(heading_rad))*_fake_target_distance_m;
+        _filt_dock_xyz_NEU_m.z = -_cur_pos_NED_m.z;      
         // float heading_rad = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x);
         _locked_heading_deg = heading_rad*RAD_TO_DEG;
         _locked_vel_NE_cm_s = Vector2f(cosf(heading_rad),sinf(heading_rad))*_dock_speed_cm_s;
@@ -387,8 +398,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.WITHIN_COAST_IN_DIST) {status = TRAN(&ModeLoiterAssisted::CoastIn);}
-        else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
-        else if (!_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::Lass);}
+        // else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else if (!_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::Default);}
         else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
@@ -433,7 +444,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
         
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        // if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
         if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);}
         else {}
         break;}
@@ -910,12 +921,12 @@ void ModeLoiterAssisted::evaluateFlags() { // ALL FLAGS MUST BE SET TO FALSE INI
     }
 
     // Check if we are within the coast in distance
-    if (_flags.DOCK_FOUND) { 
+    // if (_flags.DOCK_FOUND) { 
         _dist_to_dock_cm = (_filt_dock_xyz_NEU_m.xy()-_cur_pos_NED_m.xy()).length()*M_TO_CM;
         if (_dist_to_dock_cm < _coast_in_dist_cm.get()) {
             _flags.WITHIN_COAST_IN_DIST = true;
         }
-    }
+    // }
     
     // Check if we are stationary
     _flags.VEHICLE_STATIONARY = (_velocity_NED_m.length() <= _stationary_vel_m_s.get());

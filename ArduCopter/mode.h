@@ -1343,6 +1343,7 @@ private:
     AP_Float _thro_pitch_err_hz;
     AP_Float _thro_pitch_d_hz;
     AP_Float _stationary_vel_m_s;
+    AP_Float _fake_target_distance_m;
 
     //====================================================================
     /*---------------------------------------------------------------------------*/
