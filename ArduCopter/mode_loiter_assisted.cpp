@@ -173,33 +173,33 @@ ModeLoiterAssisted::ModeLoiterAssisted(void) : Mode()
 // loiter_init - initialise loiter controller
 bool ModeLoiterAssisted::init(bool ignore_checks)
 {
-    // #if AP_DDS_ENABLED
-    // if (AP_DDS_Client::attached_state != _flags.ATTACHED) {
-    //     set_attached_status(static_cast<float>(AP_DDS_Client::attached_state));
-    // }  
-    // // _flags.DOCK_COMMS_HEALTHY = true;
-    // #endif
+    #if AP_DDS_ENABLED
+    if (AP_DDS_Client::attached_state != _flags.ATTACHED) {
+        set_attached_status(static_cast<float>(AP_DDS_Client::attached_state));
+    }  
+    // _flags.DOCK_COMMS_HEALTHY = true;
+    #endif
 
-    // // Failsafes
-    // if (copter.failsafe.radio) {return false;}// TODO what failsafe mode should we use?
-    // if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m)) {return false;}
-    // float target_climb_rate_cm_s = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
-    // target_climb_rate_cm_s = constrain_float(target_climb_rate_cm_s, -get_pilot_speed_dn(), g.pilot_speed_up);
-    // AltHoldModeState alt_hold_state = get_alt_hold_state(target_climb_rate_cm_s);
-    // if (!(alt_hold_state == AltHoldModeState::Flying || _flags.ATTACHED)) {return false;}
+    // Failsafes
+    if (copter.failsafe.radio) {return false;}// TODO what failsafe mode should we use?
+    if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m)) {return false;}
+    float target_climb_rate_cm_s = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
+    target_climb_rate_cm_s = constrain_float(target_climb_rate_cm_s, -get_pilot_speed_dn(), g.pilot_speed_up);
+    AltHoldModeState alt_hold_state = get_alt_hold_state(target_climb_rate_cm_s);
+    if (!(alt_hold_state == AltHoldModeState::Flying || _flags.ATTACHED)) {return false;}
 
-    // // Pos control inits
-    // if (!pos_control->is_active_z()) {pos_control->init_z_controller();}
-    // pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
-    // pos_control->set_correction_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
-    // copter.set_simple_mode(Copter::SimpleMode::NONE); // disable simple mode for this mode. TODO: Validate
+    // Pos control inits
+    if (!pos_control->is_active_z()) {pos_control->init_z_controller();}
+    pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
+    pos_control->set_correction_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
+    copter.set_simple_mode(Copter::SimpleMode::NONE); // disable simple mode for this mode. TODO: Validate
 
-    // // Initialize all filters owned by this mode
-    // InitFilters();
+    // Initialize all filters owned by this mode
+    InitFilters();
 
-    // // Set State (assuming not attached for now)
-    // TRAN(&ModeLoiterAssisted::Default);
-    // (this->*_lass_state)(Event::ENTRY_SIG); // perform entry actions
+    // Set State (assuming not attached for now)
+    TRAN(&ModeLoiterAssisted::Default);
+    (this->*_lass_state)(Event::ENTRY_SIG); // perform entry actions
 
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Mode set to Loiter Assisted");
     return true;
@@ -208,30 +208,29 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
 // should be called at 100hz or more
 void ModeLoiterAssisted::run()
 {
+    if (copter.failsafe.radio) {GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"Radio failsafe");}
+    #if AP_DDS_ENABLED
+    if (AP_DDS_Client::attached_state != _flags.ATTACHED) {
+        set_attached_status(static_cast<float>(AP_DDS_Client::attached_state));
+    }  
+    // _flags.DOCK_COMMS_HEALTHY = true;
+    #endif
 
-    // if (copter.failsafe.radio) {GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"Radio failsafe");}
-    // #if AP_DDS_ENABLED
-    // if (AP_DDS_Client::attached_state != _flags.ATTACHED) {
-    //     set_attached_status(static_cast<float>(AP_DDS_Client::attached_state));
-    // }  
-    // // _flags.DOCK_COMMS_HEALTHY = true;
-    // #endif
+    if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m) || !ahrs.get_velocity_NED(_velocity_NED_m)) {
+        GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"No pos or vel estimate!");
+        abortExit();
+    }
 
-    // if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m) || !ahrs.get_velocity_NED(_velocity_NED_m)) {
-    //     GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"No pos or vel estimate!");
-    //     abortExit();
-    // }
-
-    // checkDockComms();
-    // updateFilterParams(); // Update filters (simply check for param changes)
-    // findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
-    // evaluateFlags(); // evaluate some flags
-    // sendFlagFeedback(); // send pilot feedback on flags
+    checkDockComms();
+    updateFilterParams(); // Update filters (simply check for param changes)
+    findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
+    evaluateFlags(); // evaluate some flags
+    sendFlagFeedback(); // send pilot feedback on flags
     
-    // evaluate_transitions(); // evaluate transitions
-    // runFlightCode(); // run flight code for current state
+    evaluate_transitions(); // evaluate transitions
+    runFlightCode(); // run flight code for current state
     
-    // logLass(); // log everything of interest that isn't already logged elsewhere (i.e. pos and vel)
+    logLass(); // log everything of interest that isn't already logged elsewhere (i.e. pos and vel)
 }
 
 /*---------------------------------------------------------------------------*/
