@@ -241,7 +241,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Default(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Default;
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Default state");
+        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Default state");
+        gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = true;
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
@@ -282,7 +283,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Lass;
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Lass state");
+        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Lass state");
+        gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = true;
         Vector3f zero_vel;
         pos_control->set_vel_desired_cms(zero_vel);
@@ -367,7 +369,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::LeadUp;
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering LeadUp state");
+        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering LeadUp state");
+        gcs().send_named_float("lass", float(_lass_state_name));
         #if AP_DDS_ENABLED
         AP_DDS_Client::need_to_pub_attach_detach = true;
         AP_DDS_Client::desire_attach = true;
@@ -424,7 +427,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::CoastIn;
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastIn state");
+        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastIn state");
+        gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = false;
         _coast_in_pitch_cd = pos_control->get_pitch_cd();
         _coast_in_pitch_cd = constrain_float(_coast_in_pitch_cd, LOWER_COAST_IN_PITCH_BOUND_DEG*DEG_TO_CD, UPPER_COAST_IN_PITCH_BOUND_DEG*DEG_TO_CD); // constrain
@@ -464,7 +468,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::WindDown;
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindDown state");
+        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindDown state");
+        gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = false;
         _wind_down_throttle_start = attitude_control->get_throttle_in();
         _wind_down_start_ms = millis();
@@ -513,7 +518,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Vegetable;
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Vegetable state");
+        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Vegetable state");
+        gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = false;
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::SHUT_DOWN);
         // _docked_position_NED_m = _cur_pos_NED_m;
@@ -544,7 +550,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::WindUp;
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindUp state");
+        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindUp state");
+        gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = false;
         _is_taking_off = true;
         set_land_complete(false);
@@ -639,7 +646,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastOut(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::CoastOut;
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastOut state");
+        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastOut state");
+        gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = true;
         
         #if AP_DDS_ENABLED
@@ -684,7 +692,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Recover;
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Recover state");
+        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Recover state");
+        gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = true;
         // If no recovery pos exists, set one 2 meters back and .5 meter up?
         if (is_zero(_recovery_position_NED_m.x) && is_zero(_recovery_position_NED_m.y) && is_zero(_recovery_position_NED_m.z)) {
@@ -704,8 +713,17 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
-        pos_control->set_pos_target_xy_cm(_recovery_position_NED_m.x*M_TO_CM, _recovery_position_NED_m.y*M_TO_CM);
-        pos_control->set_pos_target_z_cm(-_recovery_position_NED_m.z*M_TO_CM); // negative to convert NED to NEU
+        // pos_control->set_pos_target_xy_cm(_recovery_position_NED_m.x*M_TO_CM, _recovery_position_NED_m.y*M_TO_CM);
+        // pos_control->set_pos_target_z_cm(-_recovery_position_NED_m.z*M_TO_CM); // negative to convert NED to NEU
+
+        Vector2p pos_xy = (_recovery_position_NED_m.xy()*M_TO_CM).todouble();
+        Vector2f vel_xy;
+        Vector2f acc_xy;
+        pos_control->input_pos_vel_accel_xy(pos_xy, vel_xy, acc_xy);
+
+        float pos_z = -_recovery_position_NED_m.z*M_TO_CM;
+        float vel_z = 0.0f;
+        pos_control->input_pos_vel_accel_z(pos_z, vel_z, 0.0f);
 
         // run position controllers
         pos_control->update_xy_controller();
@@ -713,6 +731,15 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
 
         // call attitude controller with auto yaw
         attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), ahrs.get_yaw()*RAD_TO_DEG*DEG_TO_CD);
+
+        // if (millis()-_last_send_windup > _statustext_period_ms) {
+        //         float dist_to_recovery_pos_cm = (_recovery_position_NED_m-_cur_pos_NED_m).length()*M_TO_CM;
+        //         GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "pos: %.2f, %.2f, %.2f targ: %.2f, %.2f, %.2f, diff: %.4f", 
+        //         _cur_pos_NED_m.x, _cur_pos_NED_m.y, _cur_pos_NED_m.z,
+        //         _recovery_position_NED_m.x, _recovery_position_NED_m.y, _recovery_position_NED_m.z,
+        //         dist_to_recovery_pos_cm); // TODO remove or rate limit
+        //         _last_send_windup = millis();
+        //     }
         
         lasmData data;
         data.tpX = _recovery_position_NED_m.x,

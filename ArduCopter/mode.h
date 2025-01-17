@@ -1402,8 +1402,7 @@ private:
         Vegetable, // 5
         WindUp, // 6
         CoastOut, // 7
-        Recover, // 8
-        Abort // 9
+        Recover // 8
     };
 
     StateHandler _lass_state = &ModeLoiterAssisted::Default;
