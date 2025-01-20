@@ -255,6 +255,7 @@ public:
         AUTOTUNE_TEST_GAINS = 180, // auto tune tuning switch to test or revert gains
 
         LASS_ATTACH_DETACH = 181, // docking mode attach loiter_assisted
+        LASS_WINDDOWN_SAFE = 182, // docking mode winddown safe loiter_assisted
 
         // inputs from 200 will eventually used to replace RCMAP
         ROLL =               201, // roll input

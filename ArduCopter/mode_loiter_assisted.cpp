@@ -177,7 +177,6 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     if (AP_DDS_Client::attached_state != _flags.ATTACHED) {
         set_attached_status(static_cast<float>(AP_DDS_Client::attached_state));
     }  
-    // _flags.DOCK_COMMS_HEALTHY = true;
     #endif
 
     // Failsafes
@@ -213,7 +212,6 @@ void ModeLoiterAssisted::run()
     if (AP_DDS_Client::attached_state != _flags.ATTACHED) {
         set_attached_status(static_cast<float>(AP_DDS_Client::attached_state));
     }  
-    // _flags.DOCK_COMMS_HEALTHY = true;
     #endif
 
     if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m) || !ahrs.get_velocity_NED(_velocity_NED_m)) {
@@ -437,8 +435,9 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
         
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
         if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);}
+        // else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else if (_flags.WINDDOWN_SAFE) {status = TRAN(&ModeLoiterAssisted::WindDown);}
         else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
@@ -832,6 +831,14 @@ void ModeLoiterAssisted::detach() { // init detach engaged via RC_Channel
     _flags.DETACH_BUTTON_PRESSED = true;
 }
 
+void ModeLoiterAssisted::WindDownSafe() { // init attach engaged via RC_Channel
+    _flags.WINDDOWN_SAFE = true;
+}
+
+void ModeLoiterAssisted::WindDownUnSafe() { // init detach engaged via RC_Channel
+    _flags.WINDDOWN_SAFE = false;
+}
+
 void ModeLoiterAssisted::set_attached_status(float att_st) { // start being attached
     _flags.ATTACHED = !is_zero(att_st);
     GCS_SEND_TEXT(MAV_SEVERITY_INFO,"Attached Status: %d\n", _flags.ATTACHED);
@@ -870,6 +877,7 @@ void ModeLoiterAssisted::logLass() {
     flags_bitmask |= (_flags.HEADING_NORMAL_ALIGNED ? 1 : 0) << 10;
     flags_bitmask |= (_flags.DETACH_BUTTON_PRESSED ? 1 : 0) << 11;
     flags_bitmask |= (_flags.DOCK_COMMS_HEALTHY ? 1 : 0) << 12;
+    flags_bitmask |= (_flags.WINDDOWN_SAFE ? 1 : 0) << 13;
 
     if (millis()-_last_lass_log_time > _log_period_ms) {
         AP::logger().Write(

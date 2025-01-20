@@ -130,6 +130,7 @@ void RC_Channel_Copter::init_aux_function(const AUX_FUNC ch_option, const AuxSwi
     case AUX_FUNC::CUSTOM_CONTROLLER:
     case AUX_FUNC::WEATHER_VANE_ENABLE:
     case AUX_FUNC::LASS_ATTACH_DETACH:
+    case AUX_FUNC::LASS_WINDDOWN_SAFE:
     case AUX_FUNC::TRANSMITTER_TUNING:
         run_aux_function(ch_option, ch_flag, AuxFuncTriggerSource::INIT);
         break;
@@ -670,6 +671,16 @@ bool RC_Channel_Copter::do_aux_function(const AUX_FUNC ch_option, const AuxSwitc
             break;
         }
             // }
+        break;
+    case AUX_FUNC::LASS_WINDDOWN_SAFE:
+        switch (ch_flag) {
+        case AuxSwitchPos::HIGH:
+            copter.mode_loiter_assisted.WindDownSafe();
+            break;
+        default:
+            copter.mode_loiter_assisted.WindDownUnSafe();
+            break;
+        }
         break;
 #endif
 

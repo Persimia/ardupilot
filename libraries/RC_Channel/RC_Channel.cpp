@@ -822,6 +822,7 @@ const RC_Channel::LookupTable RC_Channel::lookuptable[] = {
     { AUX_FUNC::CAMERA_LENS, "Camera Lens"},
     { AUX_FUNC::MOUNT_LRF_ENABLE, "Mount LRF Enable"},
     { AUX_FUNC::LASS_ATTACH_DETACH,"AttachDetach"},
+    { AUX_FUNC::LASS_WINDDOWN_SAFE,"WindDown Safe"},
 };
 
 /* lookup the announcement for switch change */

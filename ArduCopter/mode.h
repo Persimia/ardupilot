@@ -1315,6 +1315,8 @@ public:
 
     void attach();
     void detach();
+    void WindDownSafe();
+    void WindDownUnSafe();
     void set_attached_status(float att_st);
 
     static const struct AP_Param::GroupInfo var_info[];
@@ -1368,6 +1370,7 @@ private:
         bool HEADING_NORMAL_ALIGNED = false;
         bool DETACH_BUTTON_PRESSED = false;
         bool DOCK_COMMS_HEALTHY = false;
+        bool WINDDOWN_SAFE = false;
     }; // be sure to add new ones to log!
     Flags _flags;
     enum class Status : uint8_t { 
