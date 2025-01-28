@@ -437,7 +437,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);}
         // else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
-        else if (_flags.WINDDOWN_SAFE) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else if (_flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::WindDown);}
         else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
@@ -565,7 +565,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         _is_taking_off = false;
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.VEHICLE_STATIONARY && _flags.AT_WIND_UP_PITCH) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
+        if (_flags.VEHICLE_STATIONARY && _flags.AT_WIND_UP_PITCH && _flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
         else if (_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::WindDown);} 
         else {
             float vel_ms = _velocity_NED_m.length();
@@ -832,11 +832,11 @@ void ModeLoiterAssisted::detach() { // init detach engaged via RC_Channel
 }
 
 void ModeLoiterAssisted::WindDownSafe() { // init attach engaged via RC_Channel
-    _flags.WINDDOWN_SAFE = true;
+    _flags.WU_WD_CONFIRMATION = true;
 }
 
 void ModeLoiterAssisted::WindDownUnSafe() { // init detach engaged via RC_Channel
-    _flags.WINDDOWN_SAFE = false;
+    _flags.WU_WD_CONFIRMATION = false;
 }
 
 void ModeLoiterAssisted::set_attached_status(float att_st) { // start being attached
@@ -877,7 +877,7 @@ void ModeLoiterAssisted::logLass() {
     flags_bitmask |= (_flags.HEADING_NORMAL_ALIGNED ? 1 : 0) << 10;
     flags_bitmask |= (_flags.DETACH_BUTTON_PRESSED ? 1 : 0) << 11;
     flags_bitmask |= (_flags.DOCK_COMMS_HEALTHY ? 1 : 0) << 12;
-    flags_bitmask |= (_flags.WINDDOWN_SAFE ? 1 : 0) << 13;
+    flags_bitmask |= (_flags.WU_WD_CONFIRMATION ? 1 : 0) << 13;
 
     if (millis()-_last_lass_log_time > _log_period_ms) {
         AP::logger().Write(

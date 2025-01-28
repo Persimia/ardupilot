@@ -39,7 +39,7 @@ public:
 
     // Add coordinate of obstacle to data set given yaw "angle" to obstacle in Radians 
     // "distance" to obstacle in meters "current_position" in meters from and vehicle "yaw" attitude in Radians 
-    void add_point(float angle_deg, float distance);
+    void add_point(float angle_deg, float distance_m);
 
     // Clear the data vector and set _fit_type to NONE.
     void reset();
@@ -48,7 +48,7 @@ public:
     void log_fit(Vector2f center, Vector2f normal_vec, float fit_quality, int fit_num);
 
     // Log the heading and distance
-    void log_target(const float heading, const float distance);
+    void log_target(const float heading, const float distance_m);
 
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -110,15 +110,17 @@ private:
     Vector2f _tangent_vec;
 
     //Parameters
-    AP_Float _discontinuity_threshold;
+    AP_Int8 _use_pitch_correction;
     AP_Float _angle_min_deg;
     AP_Float _angle_max_deg;
     AP_Float _rng_max_m;
     AP_Float _rng_min_m;
-    // AP_Float _lidar_sweep_rate_hz;
-    // AP_Float _center_filter_cutoff_hz;
     AP_Float _truncation_distance_mult;
     AP_Float _lidar_scan_pitch_deg;
+    AP_Float _gimbal_forward_m;
+    AP_Float _gimbal_right_m;
+    AP_Float _gimbal_up_m;
+
 
     float _fit_quality;
     int _fit_num;

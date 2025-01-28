@@ -13,13 +13,12 @@
 #define DEFAULT_LIDAR_SCAN_PITCH_DEG 1.33
 
 const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
-    // @Param{Copter}: _DISC
-    // @DisplayName: Proximity Curvefit Discontinuity Threshold
-    // @Description: Difference in Distance between subsequent points
-    // @Values: 0.1, 5.0
-    // @Units: m
+    // @Param{Copter}: _GIMBAL
+    // @DisplayName: Proximity Curvefit Using Gimbal for Lidar
+    // @Description: Put 1 or 0 for if you are using gimbal or not
+    // @Values: 0, 1
     // @User: Advanced
-    AP_GROUPINFO("_DISC", 1, AP_Proximity_CurveFit, _discontinuity_threshold, 0.5f),
+    AP_GROUPINFO("_P_CORR", 1, AP_Proximity_CurveFit, _use_pitch_correction, 0),
 
 
     // @Param{Copter}: _ANGMIN
@@ -66,6 +65,27 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Units: m
     // @User: Advanced
     AP_GROUPINFO("_SCN_PIT", 7, AP_Proximity_CurveFit, _lidar_scan_pitch_deg, DEFAULT_LIDAR_SCAN_PITCH_DEG),
+
+    // @Param{Copter}: _GIM_FW
+    // @DisplayName: Proximity Curvefit Gimbal forward distance m
+    // @Description: Proximity Curvefit Gimbal forward distance m
+    // @Units: m
+    // @User: Advanced
+    AP_GROUPINFO("_GIM_FW", 8, AP_Proximity_CurveFit, _gimbal_forward_m, 0.0f),
+
+    // @Param{Copter}: _GIM_RT
+    // @DisplayName: Proximity Curvefit Gimbal right distance m
+    // @Description: Proximity Curvefit Gimbal right distance m
+    // @Units: m
+    // @User: Advanced
+    AP_GROUPINFO("_GIM_RT", 9, AP_Proximity_CurveFit, _gimbal_right_m, 0.0f),
+
+    // @Param{Copter}: _GIM_UP
+    // @DisplayName: Proximity Curvefit Gimbal up distance m
+    // @Description: Proximity Curvefit Gimbal up distance m
+    // @Units: m
+    // @User: Advanced
+    AP_GROUPINFO("_GIM_UP", 10, AP_Proximity_CurveFit, _gimbal_up_m, 0.0f),
 
     AP_GROUPEND
 };
@@ -212,16 +232,14 @@ bool AP_Proximity_CurveFit::solve_line(AP_Proximity_CurveFit::Coefficients c, Ve
     return true;
 }
 
-
-
-void AP_Proximity_CurveFit::add_point(float angle_deg, float distance)
+void AP_Proximity_CurveFit::add_point(float angle_deg, float distance_m)
 {
     angle_deg = wrap_180(angle_deg);
     // uint8_t dir = (_last_angle < angle_deg) ? 1 : (_last_angle > angle_deg ? -1 : 0);
 
     // check if angle is within range
     if(angle_deg > _angle_min_deg.get() && angle_deg < _angle_max_deg.get()){
-        if(distance > _rng_min_m.get() && distance < _rng_max_m.get()){
+        if(distance_m > _rng_min_m.get() && distance_m < _rng_max_m.get()){
             if (_write_end < _write_start + CURVEFIT_DATA_LEN){
                 Vector2f current_position;
                 if(AP::ahrs().get_relative_position_NE_origin(current_position)){
@@ -229,8 +247,22 @@ void AP_Proximity_CurveFit::add_point(float angle_deg, float distance)
                     Vector2f point;
                     float pitch_rad = AP::ahrs().get_pitch(); // replace with pitch of sensor
                     float yaw_rad = AP::ahrs().get_yaw();
-                    point.x = distance * cosf(pitch_rad) * cosf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.x;
-                    point.y = distance * cosf(pitch_rad) * sinf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.y;
+
+                    Vector3f gimbal_offset = {_gimbal_forward_m, _gimbal_right_m, -_gimbal_up_m};
+                    gimbal_offset = AP::ahrs().get_rotation_body_to_ned()*gimbal_offset;
+
+                    // fprintf(stderr,"Offset x:%.4f\ty:%.4f\tz:%.4f\n",gimbal_offset.x,gimbal_offset.y,gimbal_offset.z);
+
+                    if (_use_pitch_correction) {
+                        point.x = distance_m * cosf(pitch_rad) * cosf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.x + gimbal_offset.x;
+                        point.y = distance_m * cosf(pitch_rad) * sinf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.y + gimbal_offset.y;
+                    }
+                    else 
+                    {
+                        point.x = distance_m * cosf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.x + gimbal_offset.x;
+                        point.y = distance_m * sinf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.y + gimbal_offset.y;
+                    }
+                    
 
                     _points_NE_origin[_write_end] = point;
                     _write_end += 1;
@@ -350,10 +382,10 @@ void AP_Proximity_CurveFit::find_closest_index(const Vector2f curr_pos, int &clo
     closest_distance = (_points_NE_origin[_read_start] - curr_pos).length_squared();
     closest_index = _read_start;
     for(int i=_read_start+1; i<_read_end; i++){
-        float distance = (_points_NE_origin[i] - curr_pos).length_squared();
-        if(distance < closest_distance){
+        float distance_m = (_points_NE_origin[i] - curr_pos).length_squared();
+        if(distance_m < closest_distance){
             closest_index = i;
-            closest_distance = distance;
+            closest_distance = distance_m;
         }
     }
 }
@@ -383,7 +415,7 @@ void AP_Proximity_CurveFit::log_fit(Vector2f center, Vector2f normal_vec, float 
                         );
 }
 
-void AP_Proximity_CurveFit::log_target(const float heading, const float distance)
+void AP_Proximity_CurveFit::log_target(const float heading, const float distance_m)
 {
     if(_fit_type == NONE){
     // return id there is no valid fit
@@ -394,7 +426,7 @@ void AP_Proximity_CurveFit::log_target(const float heading, const float distance
         LOG_PACKET_HEADER_INIT(LOG_PROXIMITY_CFIT_TGT_MSG),
         time_us        :  AP_HAL::micros64(),
         target_heading :  heading*RAD_TO_DEG,
-        target_distance:  distance
+        target_distance:  distance_m
     };
     AP::logger().WriteBlock(&pkt, sizeof(pkt));
 }
