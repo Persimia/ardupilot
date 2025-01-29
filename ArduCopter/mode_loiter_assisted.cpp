@@ -24,6 +24,7 @@
 #define DEFAULT_THRO_PITCH_ERR_HZ            400.0f // error filter frequency in Hz
 #define DEFAULT_THRO_PITCH_D_HZ              400.0f  // derivative filter frequency in Hz
 #define DEFAULT_STATIONARY_VEL_M_S           0.05f    // vehicle velocity must be under m/s
+#define DEFAULT_WINDDOWN_DECAY_TIME_S        6.0f // time to winddown throttle in seconds 
 
 
 // Hard coded parameters
@@ -160,6 +161,13 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Units: m/s
     // @User: Advanced
     AP_GROUPINFO("STAT_V", 17, ModeLoiterAssisted, _stationary_vel_m_s, DEFAULT_STATIONARY_VEL_M_S),
+
+    // @Param{Copter}: WD_S
+    // @DisplayName: Seconds spent winding down throttle
+    // @Description: Stationary velocity target
+    // @Units: m/s
+    // @User: Advanced
+    AP_GROUPINFO("WD_S", 18, ModeLoiterAssisted, _wind_down_decay_time_s, DEFAULT_WINDDOWN_DECAY_TIME_S),
 
     AP_GROUPEND
 };
@@ -487,7 +495,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
         // float roll_cmd_cd = ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD; // TODO: Basically acts like relax roll, need to actively control roll when new dock mechanism is made
         // attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(roll_cmd_cd,ahrs.get_pitch()*RAD_TO_DEG*DEG_TO_CD,0.0f);
         float wind_down_throttle = _wind_down_throttle_start * 
-            (1.0f - (float(millis() - _wind_down_start_ms)/1000.0f/_wind_down_decay_time_s));
+            (1.0f - (float(millis() - _wind_down_start_ms)/1000.0f/_wind_down_decay_time_s.get()));
         wind_down_throttle = MAX(wind_down_throttle,0.0f);
         attitude_control->set_throttle_out(wind_down_throttle, false, g.throttle_filt);
         if (wind_down_throttle < FLT_EPSILON) {_flags.THROTTLE_WOUND_DOWN = true;} 
@@ -965,6 +973,12 @@ void ModeLoiterAssisted::abortExit() {
         // this should never happen but just in case
         copter.set_mode(Mode::Number::STABILIZE, ModeReason::UNKNOWN);
     }
+}
+
+// send exit lass message
+void ModeLoiterAssisted::exit()
+{
+    gcs().send_named_float("lass", 9);
 }
 
 // must be unset on exit of state! Must never be called twice in a row! Don't want to overwrite originals

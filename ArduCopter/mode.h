@@ -1303,6 +1303,7 @@ public:
 
     bool init(bool ignore_checks) override;
     void run() override;
+    void exit() override;
 
     bool requires_GPS() const override { return true; }
     bool has_manual_throttle() const override { return false; }
@@ -1345,6 +1346,8 @@ private:
     AP_Float _thro_pitch_err_hz;
     AP_Float _thro_pitch_d_hz;
     AP_Float _stationary_vel_m_s;
+    AP_Float _wind_down_decay_time_s; // seconds from current throttle to zero in linear decay
+
 
     //====================================================================
     /*---------------------------------------------------------------------------*/
@@ -1443,7 +1446,6 @@ private:
     float _dist_to_dock_cm;
     float _coast_in_pitch_cd;
     float _wind_down_throttle_start;
-    float _wind_down_decay_time_s = 6; // seconds from current throttle to zero in linear decay. TODO make parameters
     uint32_t _wind_down_start_ms; // start of wind down maneuver
     uint32_t _wind_up_start_ms; // start of wind down maneuver
     uint32_t _log_period_ms = 100;
