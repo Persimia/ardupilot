@@ -9,7 +9,7 @@
 #if AP_PROXIMITY_CURVEFIT_ENABLED
 #define LARGE_FLOAT 1.0e3
 #define QUANTIZATION 1.0E-3
-#define DEFAULT_TRUNCATION_DISTANCE_MULT 5
+#define DEFAULT_TRUNCATION_DISTANCE_M 0.7
 #define DEFAULT_LIDAR_SCAN_PITCH_DEG 1.33
 
 const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
@@ -57,7 +57,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @DisplayName: Proximity Curvefit Truncation distance cutoff
     // @Description: Proximity Curvefit Truncation distance cutoff
     // @User: Advanced
-    AP_GROUPINFO("_TRNC_M", 6, AP_Proximity_CurveFit, _truncation_distance_mult, DEFAULT_TRUNCATION_DISTANCE_MULT),
+    AP_GROUPINFO("_TRNC_M", 6, AP_Proximity_CurveFit, _truncation_distance_m, DEFAULT_TRUNCATION_DISTANCE_M),
 
     // @Param{Copter}: _SCN_PIT
     // @DisplayName: Proximity Curvefit Scan pitch
@@ -248,12 +248,12 @@ void AP_Proximity_CurveFit::add_point(float angle_deg, float distance_m)
                     float pitch_rad = AP::ahrs().get_pitch(); // replace with pitch of sensor
                     float yaw_rad = AP::ahrs().get_yaw();
 
-                    Vector3f gimbal_offset = {_gimbal_forward_m, _gimbal_right_m, -_gimbal_up_m};
+                    Vector3f gimbal_offset = {_gimbal_forward_m.get(), _gimbal_right_m.get(), -_gimbal_up_m.get()};
                     gimbal_offset = AP::ahrs().get_rotation_body_to_ned()*gimbal_offset;
 
                     // fprintf(stderr,"Offset x:%.4f\ty:%.4f\tz:%.4f\n",gimbal_offset.x,gimbal_offset.y,gimbal_offset.z);
 
-                    if (_use_pitch_correction) {
+                    if (_use_pitch_correction.get()) {
                         point.x = distance_m * cosf(pitch_rad) * cosf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.x + gimbal_offset.x;
                         point.y = distance_m * cosf(pitch_rad) * sinf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.y + gimbal_offset.y;
                     }
@@ -320,30 +320,44 @@ void AP_Proximity_CurveFit::truncate_data(Vector2f curr_pos)
     //     float dist2 = (_points_NE_origin[closest_index]-_points_NE_origin[nearest_neighbor2]).length();
     //     float min_dist = std::min(dist1,dist2);
 
-        // Check for distance metric and truncate data 
-        for(int i = closest_index; i < _read_end-1; i++){
-            int num_away = i+1-closest_index;
-            float expected_dist1 = sinf(_lidar_scan_pitch_deg*num_away*DEG_TO_RAD)*closest_distance;
-            float expected_dist2 = sinf((_lidar_scan_pitch_deg*num_away-1)*DEG_TO_RAD)*closest_distance;
-            float truncation_distance_cutoff = abs(expected_dist1-expected_dist2); // This is the expected distance away if we were perpendicular to a flat wall
+        // // Check for distance metric and truncate data 
+        // for(int i = closest_index; i < _read_end-1; i++){
+        //     int num_away = i+1-closest_index;
+        //     float expected_dist1 = sinf(_lidar_scan_pitch_deg.get()*num_away*DEG_TO_RAD)*closest_distance;
+        //     float expected_dist2 = sinf((_lidar_scan_pitch_deg.get()*num_away-1)*DEG_TO_RAD)*closest_distance;
+        //     float truncation_distance_cutoff = abs(expected_dist1-expected_dist2); // This is the expected distance away if we were perpendicular to a flat wall
             
-            if((_points_NE_origin[i+1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_mult){
-                _read_end = i+1;
-                break;
-            }
-        }
-        for(int i = closest_index; i > _read_start; i--){
-            int num_away = closest_index-i+1;
-            float expected_dist1 = sinf(_lidar_scan_pitch_deg*num_away*DEG_TO_RAD)*closest_distance;
-            float expected_dist2 = sinf((_lidar_scan_pitch_deg*num_away-1)*DEG_TO_RAD)*closest_distance;
-            float truncation_distance_cutoff = abs(expected_dist1-expected_dist2); // This is the expected distance away if we were perpendicular to a flat wall
+        //     if((_points_NE_origin[i+1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_m.get()){
+        //         _read_end = i+1;
+        //         break;
+        //     }
+        // }
+        // for(int i = closest_index; i > _read_start; i--){
+        //     int num_away = closest_index-i+1;
+        //     float expected_dist1 = sinf(_lidar_scan_pitch_deg.get()*num_away*DEG_TO_RAD)*closest_distance;
+        //     float expected_dist2 = sinf((_lidar_scan_pitch_deg.get()*num_away-1)*DEG_TO_RAD)*closest_distance;
+        //     float truncation_distance_cutoff = abs(expected_dist1-expected_dist2); // This is the expected distance away if we were perpendicular to a flat wall
             
-            if((_points_NE_origin[i-1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_mult){
-                _read_start = i;
-                break;
-            }
-        }
+        //     if((_points_NE_origin[i-1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_m.get()){
+        //         _read_start = i;
+        //         break;
+        //     }
+        // }
     // }   
+
+    // Check for distance metric and truncate data 
+    for(int i = closest_index; i < _read_end-1; i++){
+        if((_points_NE_origin[i+1]-_points_NE_origin[i]).length() > _truncation_distance_m.get()){
+            _read_end = i+1;
+            break;
+        }
+    }
+    for(int i = closest_index; i > _read_start; i--){
+        if((_points_NE_origin[i-1]-_points_NE_origin[i]).length() > _truncation_distance_m.get()){
+            _read_start = i;
+            break;
+        }
+    }
 
     // Vector2f normal_dir = (_points_NE_origin[closest_index]).normalized();
     // // Check for discontinuity and truncate data 

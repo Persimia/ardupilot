@@ -115,7 +115,7 @@ private:
     AP_Float _angle_max_deg;
     AP_Float _rng_max_m;
     AP_Float _rng_min_m;
-    AP_Float _truncation_distance_mult;
+    AP_Float _truncation_distance_m;
     AP_Float _lidar_scan_pitch_deg;
     AP_Float _gimbal_forward_m;
     AP_Float _gimbal_right_m;
