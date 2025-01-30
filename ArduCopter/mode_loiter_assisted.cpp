@@ -190,23 +190,23 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     // Failsafes
     if (copter.failsafe.radio) {return false;}// TODO what failsafe mode should we use?
     if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m)) {return false;}
-    float target_climb_rate_cm_s = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
-    target_climb_rate_cm_s = constrain_float(target_climb_rate_cm_s, -get_pilot_speed_dn(), g.pilot_speed_up);
-    AltHoldModeState alt_hold_state = get_alt_hold_state(target_climb_rate_cm_s);
-    if (!(alt_hold_state == AltHoldModeState::Flying || _flags.ATTACHED)) {return false;}
+    // float target_climb_rate_cm_s = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
+    // target_climb_rate_cm_s = constrain_float(target_climb_rate_cm_s, -get_pilot_speed_dn(), g.pilot_speed_up);
+    // AltHoldModeState alt_hold_state = get_alt_hold_state(target_climb_rate_cm_s);
+    // if (!(alt_hold_state == AltHoldModeState::Flying || _flags.ATTACHED)) {return false;}
 
-    // Pos control inits
-    if (!pos_control->is_active_z()) {pos_control->init_z_controller();}
-    pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
-    pos_control->set_correction_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
-    copter.set_simple_mode(Copter::SimpleMode::NONE); // disable simple mode for this mode. TODO: Validate
+    // // Pos control inits
+    // if (!pos_control->is_active_z()) {pos_control->init_z_controller();}
+    // pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
+    // pos_control->set_correction_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
+    // copter.set_simple_mode(Copter::SimpleMode::NONE); // disable simple mode for this mode. TODO: Validate
 
     // Initialize all filters owned by this mode
     InitFilters();
 
-    // Set State (assuming not attached for now)
-    TRAN(&ModeLoiterAssisted::Default);
-    (this->*_lass_state)(Event::ENTRY_SIG); // perform entry actions
+    // // Set State (assuming not attached for now)
+    // TRAN(&ModeLoiterAssisted::Default);
+    // (this->*_lass_state)(Event::ENTRY_SIG); // perform entry actions
 
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Mode set to Loiter Assisted");
     return true;
@@ -227,16 +227,19 @@ void ModeLoiterAssisted::run()
         abortExit();
     }
 
-    checkDockComms();
-    updateFilterParams(); // Update filters (simply check for param changes)
+    // checkDockComms();
+    // updateFilterParams(); // Update filters (simply check for param changes)
     findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
-    evaluateFlags(); // evaluate some flags
-    sendFlagFeedback(); // send pilot feedback on flags
+    float heading_to_dock_rad = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_RAD;
+    float heading_to_dock_dist_m = (_cur_pos_NED_m.xy()-_filt_dock_xyz_NEU_m.xy()).length();
+    g2.proximity.curvefit->log_target(heading_to_dock_rad, heading_to_dock_dist_m);
+    // evaluateFlags(); // evaluate some flags
+    // sendFlagFeedback(); // send pilot feedback on flags
     
-    evaluate_transitions(); // evaluate transitions
-    runFlightCode(); // run flight code for current state
+    // evaluate_transitions(); // evaluate transitions
+    // runFlightCode(); // run flight code for current state
     
-    logLass(); // log everything of interest that isn't already logged elsewhere (i.e. pos and vel)
+    // logLass(); // log everything of interest that isn't already logged elsewhere (i.e. pos and vel)
 }
 
 /*---------------------------------------------------------------------------*/
