@@ -241,8 +241,8 @@ void AP_Proximity_CurveFit::add_point(float angle_deg, float distance_m)
     if(angle_deg > _angle_min_deg.get() && angle_deg < _angle_max_deg.get()){
         if(distance_m > _rng_min_m.get() && distance_m < _rng_max_m.get()){
             if (_write_end < _write_start + CURVEFIT_DATA_LEN){
-                Vector2f current_position;
-                if(AP::ahrs().get_relative_position_NE_origin(current_position)){
+                Vector2f current_position_NE_m;
+                if(AP::ahrs().get_relative_position_NE_origin(current_position_NE_m)){
                     // compute point in Global NE frame
                     Vector2f point;
                     float pitch_rad = AP::ahrs().get_pitch(); // replace with pitch of sensor
@@ -254,13 +254,13 @@ void AP_Proximity_CurveFit::add_point(float angle_deg, float distance_m)
                     // fprintf(stderr,"Offset x:%.4f\ty:%.4f\tz:%.4f\n",gimbal_offset.x,gimbal_offset.y,gimbal_offset.z);
 
                     if (_use_pitch_correction.get()) {
-                        point.x = distance_m * cosf(pitch_rad) * cosf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.x + gimbal_offset.x;
-                        point.y = distance_m * cosf(pitch_rad) * sinf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.y + gimbal_offset.y;
+                        point.x = distance_m * cosf(pitch_rad) * cosf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position_NE_m.x + gimbal_offset.x;
+                        point.y = distance_m * cosf(pitch_rad) * sinf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position_NE_m.y + gimbal_offset.y;
                     }
                     else 
                     {
-                        point.x = distance_m * cosf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.x + gimbal_offset.x;
-                        point.y = distance_m * sinf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position.y + gimbal_offset.y;
+                        point.x = distance_m * cosf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position_NE_m.x + gimbal_offset.x;
+                        point.y = distance_m * sinf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position_NE_m.y + gimbal_offset.y;
                     }
                     
 
@@ -327,7 +327,7 @@ void AP_Proximity_CurveFit::truncate_data(Vector2f curr_pos)
         //     float expected_dist2 = sinf((_lidar_scan_pitch_deg.get()*num_away-1)*DEG_TO_RAD)*closest_distance;
         //     float truncation_distance_cutoff = abs(expected_dist1-expected_dist2); // This is the expected distance away if we were perpendicular to a flat wall
             
-        //     if((_points_NE_origin[i+1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_m.get()){
+        //     if((_points_NE_origin[i+1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_mult.get()){
         //         _read_end = i+1;
         //         break;
         //     }
@@ -338,7 +338,7 @@ void AP_Proximity_CurveFit::truncate_data(Vector2f curr_pos)
         //     float expected_dist2 = sinf((_lidar_scan_pitch_deg.get()*num_away-1)*DEG_TO_RAD)*closest_distance;
         //     float truncation_distance_cutoff = abs(expected_dist1-expected_dist2); // This is the expected distance away if we were perpendicular to a flat wall
             
-        //     if((_points_NE_origin[i-1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_m.get()){
+        //     if((_points_NE_origin[i-1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_mult.get()){
         //         _read_start = i;
         //         break;
         //     }

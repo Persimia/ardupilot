@@ -390,9 +390,10 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         _locked_heading_deg = heading_rad*RAD_TO_DEG;
         _locked_vel_NE_cm_s = Vector2f(cosf(heading_rad),sinf(heading_rad))*_dock_speed_cm_s;
         _recovery_position_NED_m = _cur_pos_NED_m;
+        _locked_dock_pos_NE_m = _filt_dock_xyz_NEU_m.xy();
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
-        
+        _locked_dock_pos_NE_m = Vector2f(INFINITY, INFINITY); // get rid of locked dock target because we don't care if we leave leadup
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.WITHIN_COAST_IN_DIST) {status = TRAN(&ModeLoiterAssisted::CoastIn);}
@@ -440,7 +441,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
         _coast_in_pitch_cd = constrain_float(_coast_in_pitch_cd, LOWER_COAST_IN_PITCH_BOUND_DEG*DEG_TO_CD, UPPER_COAST_IN_PITCH_BOUND_DEG*DEG_TO_CD); // constrain
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
-        
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);}
@@ -953,8 +953,11 @@ void ModeLoiterAssisted::evaluateFlags() { // ALL FLAGS MUST BE SET TO FALSE INI
     }
 
     // Check if we are within the coast in distance
-    if (_flags.DOCK_FOUND) { 
-        _dist_to_dock_cm = (_filt_dock_xyz_NEU_m.xy()-_cur_pos_NED_m.xy()).length()*M_TO_CM;
+    if (_flags.DOCK_FOUND && !_locked_dock_pos_NE_m.is_inf()) { 
+    // if (_flags.DOCK_FOUND) { 
+        // _locked_vel_NE_cm_s/_dock_speed_cm_s // This is the unit vector for LeadUp
+        _dist_to_dock_cm = abs((_locked_dock_pos_NE_m - _cur_pos_NED_m.xy()).dot(_locked_vel_NE_cm_s/_dock_speed_cm_s))*M_TO_CM; // This gives the value along that projected vector
+        // _dist_to_dock_cm = (_filt_dock_xyz_NEU_m.xy()-_cur_pos_NED_m.xy()).length()*M_TO_CM;
         if (_dist_to_dock_cm < _coast_in_dist_cm.get()) {
             _flags.WITHIN_COAST_IN_DIST = true;
         }

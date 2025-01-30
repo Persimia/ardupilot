@@ -1443,6 +1443,7 @@ private:
     Vector2f _filt_dock_normal_NEU;
     float _locked_heading_deg;
     Vector2f _locked_vel_NE_cm_s;
+    Vector2f _locked_dock_pos_NE_m{INFINITY, INFINITY};
     float _dist_to_dock_cm;
     float _coast_in_pitch_cd;
     float _wind_down_throttle_start;
