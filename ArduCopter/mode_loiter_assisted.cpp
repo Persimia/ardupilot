@@ -227,7 +227,7 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     InitFilters();
 
     // Set State (assuming not attached for now)
-    TRAN(&ModeLoiterAssisted::Default);
+    TRAN(&ModeLoiterAssisted::Vegetable);
     (this->*_lass_state)(Event::ENTRY_SIG); // perform entry actions
 
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Mode set to Loiter Assisted");
@@ -611,7 +611,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
         lasmData data;
-        float throttle = 0.0f;
+        float wind_up_throttle = 0.0f;
         if (ahrs.get_pitch()*RAD_TO_DEG < (_wind_up_starting_pitch_deg - _wind_up_pitch_delta_deg) && !_wind_up_pitch_reached) {
             _wind_up_pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
             _wind_up_pitch_reached = true;
@@ -619,17 +619,18 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         }
         if (motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
             if (!_wind_up_pitch_reached){
-                float wind_up_throttle = throttle_hover() * 
+                wind_up_throttle = throttle_hover() * 
                     ((float(millis() - _wind_up_start_ms)/1000.0f/_wind_down_decay_time_s.get()));
                 wind_up_throttle = MIN(wind_up_throttle, 1.0f); // throw a huge error if this happens
 
                 attitude_control->set_throttle_out(wind_up_throttle, false, g.throttle_filt);
-                attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(
+                attitude_control->input_euler_angle_roll_pitch_yaw(
                     ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
                     ahrs.get_pitch()*RAD_TO_DEG*DEG_TO_CD, // current pitch
-                    0.0f // zero yaw rate
+                    ahrs.get_yaw()*RAD_TO_DEG*DEG_TO_CD, // zero yaw rate
+                    true
                 ); 
-                data.thr = throttle;
+                data.thr = wind_up_throttle;
                 data.rol = ahrs.get_roll()*RAD_TO_DEG;
                 data.pit = ahrs.get_pitch()*RAD_TO_DEG;
             }
@@ -637,14 +638,15 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
                 if (!pos_control->is_active_z()) {
                     pos_control->init_z_controller();
                 }
-                pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
+                pos_control->climb(0.0f);
                 pos_control->update_z_controller();
-                attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(
+                attitude_control->input_euler_angle_roll_pitch_yaw(
                     ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
-                    _wind_up_pitch_deg*RAD_TO_DEG*DEG_TO_CD, // current pitch
-                    0.0f // zero yaw rate
+                    _wind_up_pitch_deg*DEG_TO_CD, // current pitch
+                    ahrs.get_yaw()*RAD_TO_DEG*DEG_TO_CD, // zero yaw rate
+                    true
                 );
-                data.thr = throttle;
+                // data.thr = wind_up_throttle;
                 data.rol = ahrs.get_roll()*RAD_TO_DEG;
                 data.pit = _wind_up_pitch_deg;
             } 
