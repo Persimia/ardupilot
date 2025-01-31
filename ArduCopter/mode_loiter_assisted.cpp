@@ -627,7 +627,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
                 attitude_control->input_euler_angle_roll_pitch_yaw(
                     ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
                     ahrs.get_pitch()*RAD_TO_DEG*DEG_TO_CD, // current pitch
-                    ahrs.get_yaw()*RAD_TO_DEG*DEG_TO_CD, // zero yaw rate
+                    ahrs.get_yaw()*RAD_TO_DEG*DEG_TO_CD, // relax yaw
                     true
                 ); 
                 data.thr = wind_up_throttle;
@@ -638,15 +638,17 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
                 if (!pos_control->is_active_z()) {
                     pos_control->init_z_controller();
                 }
-                pos_control->climb(0.0f);
+                float lever_arm_cm = 63;
+                float delta_z_cm = lever_arm_cm*(sinf(ahrs.get_pitch())-sinf(_wind_up_pitch_deg*DEG_TO_RAD));
+                pos_control->set_alt_target_with_slew(inertial_nav.get_position_z_up_cm() + delta_z_cm);
                 pos_control->update_z_controller();
                 attitude_control->input_euler_angle_roll_pitch_yaw(
                     ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
-                    _wind_up_pitch_deg*DEG_TO_CD, // current pitch
-                    ahrs.get_yaw()*RAD_TO_DEG*DEG_TO_CD, // zero yaw rate
+                    ahrs.get_pitch()*RAD_TO_DEG*DEG_TO_CD, // current pitch
+                    ahrs.get_yaw()*RAD_TO_DEG*DEG_TO_CD, // relax yaw
                     true
                 );
-                // data.thr = wind_up_throttle;
+                data.thr = delta_z_cm; // TODO FIX THIS ISNT RIGHT PLS ALARM ALARM
                 data.rol = ahrs.get_roll()*RAD_TO_DEG;
                 data.pit = _wind_up_pitch_deg;
             } 
