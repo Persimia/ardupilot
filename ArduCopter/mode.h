@@ -1435,7 +1435,7 @@ private:
     void set_attitude_control_rate_limits(float limit_degs);
     void unset_attitude_control_rate_limits();
     void checkDockComms();
-    float _wind_up_pitch_reached;
+    bool _wind_up_pitch_reached;
     float _wind_up_pitch_deg;
     float _wind_up_starting_pitch_deg;
     float _heading_normal_error_deg;
