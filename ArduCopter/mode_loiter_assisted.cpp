@@ -25,12 +25,12 @@
 #define DEFAULT_THRO_PITCH_D_HZ              400.0f  // derivative filter frequency in Hz
 #define DEFAULT_STATIONARY_VEL_M_S           0.05f    // vehicle velocity must be under m/s
 #define DEFAULT_WINDDOWN_DECAY_TIME_S        6.0f // time to winddown throttle in seconds 
+#define DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
+#define DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG     -2.0f
 
 
 // Hard coded parameters
 #define WIND_UP_PITCH_TOL_DEG              0.5f   
-#define LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
-#define UPPER_COAST_IN_PITCH_BOUND_DEG     0.0f
 #define RECOVERY_DIST_THRESH_CM            50.0f
 #define COAST_OUT_DIST_CM                  40.0f
 #define HEADING_NORMAL_TOL_DEG             5.0f    // degrees between heading and dock surface normal. Change this?? 
@@ -168,6 +168,20 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Units: m/s
     // @User: Advanced
     AP_GROUPINFO("WD_S", 18, ModeLoiterAssisted, _wind_down_decay_time_s, DEFAULT_WINDDOWN_DECAY_TIME_S),
+
+    // @Param{Copter}: CIP_MIN
+    // @DisplayName: Min coast in pitch degrees
+    // @Description: Stationary velocity target
+    // @Units: deg
+    // @User: Advanced
+    AP_GROUPINFO("CIP_MIN", 19, ModeLoiterAssisted, _lower_coast_in_pitch_bound_deg, DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG),
+
+    // @Param{Copter}: CIP_MAX
+    // @DisplayName: Max coast in pitch degrees
+    // @Description: Stationary velocity target
+    // @Units: deg
+    // @User: Advanced
+    AP_GROUPINFO("CIP_MAX", 20, ModeLoiterAssisted, _upper_coast_in_pitch_bound_deg, DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG),
 
     AP_GROUPEND
 };
@@ -438,7 +452,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = false;
         _coast_in_pitch_cd = pos_control->get_pitch_cd();
-        _coast_in_pitch_cd = constrain_float(_coast_in_pitch_cd, LOWER_COAST_IN_PITCH_BOUND_DEG*DEG_TO_CD, UPPER_COAST_IN_PITCH_BOUND_DEG*DEG_TO_CD); // constrain
+        _coast_in_pitch_cd = constrain_float(_coast_in_pitch_cd, _lower_coast_in_pitch_bound_deg*DEG_TO_CD, _upper_coast_in_pitch_bound_deg*DEG_TO_CD); // constrain
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         break;}
@@ -738,7 +752,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
         pos_control->update_z_controller();
 
         // call attitude controller with auto yaw
-        attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), ahrs.get_yaw()*RAD_TO_DEG*DEG_TO_CD);
+        attitude_control->input_thrust_vector_rate_heading(pos_control->get_thrust_vector(), 0.0f, true);
 
         // if (millis()-_last_send_windup > _statustext_period_ms) {
         //         float dist_to_recovery_pos_cm = (_recovery_position_NED_m-_cur_pos_NED_m).length()*M_TO_CM;
@@ -850,7 +864,7 @@ void ModeLoiterAssisted::WindDownUnSafe() { // init detach engaged via RC_Channe
 
 void ModeLoiterAssisted::set_attached_status(float att_st) { // start being attached
     _flags.ATTACHED = !is_zero(att_st);
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO,"Attached Status: %d\n", _flags.ATTACHED);
+    // GCS_SEND_TEXT(MAV_SEVERITY_INFO,"Attached Status: %d\n", _flags.ATTACHED);
     _last_att_st_time = millis();
     _flags.DOCK_COMMS_HEALTHY = true;
 }

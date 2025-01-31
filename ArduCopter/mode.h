@@ -1347,6 +1347,8 @@ private:
     AP_Float _thro_pitch_d_hz;
     AP_Float _stationary_vel_m_s;
     AP_Float _wind_down_decay_time_s; // seconds from current throttle to zero in linear decay
+    AP_Float _lower_coast_in_pitch_bound_deg;
+    AP_Float _upper_coast_in_pitch_bound_deg;
 
 
     //====================================================================
