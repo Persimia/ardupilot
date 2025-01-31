@@ -1305,7 +1305,7 @@ public:
     void run() override;
     void exit() override;
 
-    bool requires_GPS() const override { return true; }
+    bool requires_GPS() const override { return false; }
     bool has_manual_throttle() const override { return false; }
     bool allows_arming(AP_Arming::Method method) const override { return true; };
     bool is_autopilot() const override { return false; }
@@ -1337,7 +1337,7 @@ private:
     AP_Float _dock_speed_cm_s;
     AP_Float _undock_speed_cm_s;
     AP_Float _coast_in_dist_cm;
-    AP_Float _wind_up_pitch_deg;
+    AP_Float _coast_out_pitch_deg;
     AP_Float _thro_pitch_p;
     AP_Float _thro_pitch_i;
     AP_Float _thro_pitch_d;
@@ -1349,6 +1349,7 @@ private:
     AP_Float _wind_down_decay_time_s; // seconds from current throttle to zero in linear decay
     AP_Float _lower_coast_in_pitch_bound_deg;
     AP_Float _upper_coast_in_pitch_bound_deg;
+    AP_Float _wind_up_pitch_delta_deg;
 
 
     //====================================================================
@@ -1434,6 +1435,9 @@ private:
     void set_attitude_control_rate_limits(float limit_degs);
     void unset_attitude_control_rate_limits();
     void checkDockComms();
+    bool _wind_up_pitch_reached;
+    float _wind_up_pitch_deg;
+    float _wind_up_starting_pitch_deg;
     float _heading_normal_error_deg;
     uint32_t _last_att_st_time;
     Vector3f _velocity_NED_m;
@@ -1450,7 +1454,7 @@ private:
     float _coast_in_pitch_cd;
     float _wind_down_throttle_start;
     uint32_t _wind_down_start_ms; // start of wind down maneuver
-    uint32_t _wind_up_start_ms; // start of wind down maneuver
+    uint32_t _wind_up_start_ms; // start of wind up maneuver
     uint32_t _log_period_ms = 100;
     uint32_t _statustext_period_ms = 1000;
     Vector3f _recovery_position_NED_m; // Position where leadup state was entered 
