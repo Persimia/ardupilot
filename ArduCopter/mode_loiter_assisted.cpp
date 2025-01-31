@@ -1007,8 +1007,8 @@ void ModeLoiterAssisted::unset_attitude_control_rate_limits() {
 
 
 void ModeLoiterAssisted::InitFilters() {
-    _dock_pos_filter.set_cutoff_frequency(_dock_pos_filt_hz.get()); 
-    _dock_norm_filter.set_cutoff_frequency(_dock_pos_filt_hz.get()); 
+    _dock_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get()); 
+    _dock_norm_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get()); 
     _dock_target_window_var = WindowVar(_wv_window_size.get()); // reinit with new min samples
     _yaw_buf = ModeLoiterAssisted::YawBuffer(); // reinit yaw buffer
 }
@@ -1016,10 +1016,10 @@ void ModeLoiterAssisted::InitFilters() {
 void ModeLoiterAssisted::updateFilterParams() {
     // check for filter change
     if (!is_equal(_dock_pos_filter.get_cutoff_freq(), _dock_pos_filt_hz.get())) { // TODO update to dock_hz
-        _dock_pos_filter.set_cutoff_frequency(_dock_pos_filt_hz.get());
+        _dock_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get());
     }
     if (!is_equal(_dock_norm_filter.get_cutoff_freq(), _dock_pos_filt_hz.get())) { // TODO update to dock_hz
-        _dock_norm_filter.set_cutoff_frequency(_dock_pos_filt_hz.get());
+        _dock_norm_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get());
     }
     if (!is_equal(_dock_target_window_var.get_window_size(), _wv_window_size.get())) {
         _dock_target_window_var.set_new_window_size(_wv_window_size.get());
