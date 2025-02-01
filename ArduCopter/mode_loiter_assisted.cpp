@@ -16,9 +16,9 @@
 #define UNDOCK_SPEED_CM_S_DEFAULT            50.0f
 #define CID_CM_DEFAULT                       80.0f // coast in distance
 #define WUP_DEG_DEFAULT                      5.0f
-#define DEFAULT_THRO_PITCH_P_GAIN            0.0f  // initial P gain
-#define DEFAULT_THRO_PITCH_I_GAIN            0.005f // initial I gain
-#define DEFAULT_THRO_PITCH_D_GAIN            0.0f // initial D gain
+#define DEFAULT_THRO_PITCH_P_GAIN            0.01f  // initial P gain
+#define DEFAULT_THRO_PITCH_I_GAIN            0.0f // initial I gain
+#define DEFAULT_THRO_PITCH_D_GAIN            0.002f // initial D gain
 #define DEFAULT_THRO_PITCH_FF_GAIN           0.0f  // initial feed-forward (FF)
 #define DEFAULT_THRO_PITCH_IMAX              0.5f // integrator max  is half throttle
 #define DEFAULT_THRO_PITCH_ERR_HZ            400.0f // error filter frequency in Hz
@@ -27,7 +27,7 @@
 #define DEFAULT_WINDDOWN_DECAY_TIME_S        6.0f // time to winddown throttle in seconds 
 #define DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
 #define DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG     -2.0f
-#define DEFAULT_MAX_TP_THROTTLE_RATE        0.1f // ten percent throttle per second default (~3-4 sec for hover throttle)
+#define DEFAULT_MAX_TP_THROTTLE_RATE        1.0f // ten percent throttle per second default (~3-4 sec for hover throttle)
 
 
 // Hard coded parameters
