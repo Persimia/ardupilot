@@ -1299,7 +1299,7 @@ public:
     ModeLoiterAssisted(void);
     // inherit constructor
     using Mode::Mode;
-    Number mode_number() const override { return Number::LOITER_ASSISTED; }
+    Number mode_number() const override { return Number::LOITER_ASSISTED; } 
 
     bool init(bool ignore_checks) override;
     void run() override;
