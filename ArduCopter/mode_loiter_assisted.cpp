@@ -27,6 +27,7 @@
 #define DEFAULT_WINDDOWN_DECAY_TIME_S        6.0f // time to winddown throttle in seconds 
 #define DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
 #define DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG     -2.0f
+#define DEFAULT_MAX_TP_THROTTLE_RATE        0.1f // ten percent throttle per second default (~3-4 sec for hover throttle)
 
 
 // Hard coded parameters
@@ -183,6 +184,12 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("CIP_MAX", 20, ModeLoiterAssisted, _upper_coast_in_pitch_bound_deg, DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG),
 
+    // @Param{Copter}: TP_SLEW
+    // @DisplayName: Max rate of change of throttle in 0-1 units per second
+    // @Description: Max rate of change of throttle in 0-1 units per second
+    // @Units: units/s
+    // @User: Advanced
+    AP_GROUPINFO("TP_SLEW", 21, ModeLoiterAssisted, _max_TP_throttle_rate, DEFAULT_MAX_TP_THROTTLE_RATE),
     AP_GROUPEND
 };
 
@@ -203,7 +210,7 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
 
     // Failsafes
     if (copter.failsafe.radio) {return false;}// TODO what failsafe mode should we use?
-    if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m)) {return false;}
+    // if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m)) {return false;}
     float target_climb_rate_cm_s = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
     target_climb_rate_cm_s = constrain_float(target_climb_rate_cm_s, -get_pilot_speed_dn(), g.pilot_speed_up);
     AltHoldModeState alt_hold_state = get_alt_hold_state(target_climb_rate_cm_s);
@@ -219,7 +226,7 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     InitFilters();
 
     // Set State (assuming not attached for now)
-    TRAN(&ModeLoiterAssisted::Default);
+    TRAN(&ModeLoiterAssisted::Vegetable);
     (this->*_lass_state)(Event::ENTRY_SIG); // perform entry actions
 
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Mode set to Loiter Assisted");
@@ -236,14 +243,14 @@ void ModeLoiterAssisted::run()
     }  
     #endif
 
-    if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m) || !ahrs.get_velocity_NED(_velocity_NED_m)) {
-        GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"No pos or vel estimate!");
-        abortExit();
-    }
+    // if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m) || !ahrs.get_velocity_NED(_velocity_NED_m)) {
+    //     GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"No pos or vel estimate!");
+    //     abortExit();
+    // }
 
     checkDockComms();
     updateFilterParams(); // Update filters (simply check for param changes)
-    findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
+    // findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
     evaluateFlags(); // evaluate some flags
     sendFlagFeedback(); // send pilot feedback on flags
     
@@ -578,17 +585,18 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         set_land_complete(false);
         attitude_control->reset_rate_controller_I_terms();
         attitude_control->reset_target_and_rate();
-        _wind_up_start_ms = millis();
+        // _wind_up_start_ms = millis();
         attitude_control->set_throttle_out(0.0f, false, 0.0f); // Start at zero throttle
         _thro_pitch_pid.reset_filter();
         _thro_pitch_pid.reset_I();
+        _wind_up_throttle = 0.0f;
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         _is_taking_off = false;
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.VEHICLE_STATIONARY && _flags.AT_WIND_UP_PITCH && _flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
-        else if (_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::WindDown);} 
+        // if (_flags.VEHICLE_STATIONARY && _flags.AT_WIND_UP_PITCH && _flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
+        if (_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::WindDown);} 
         else {
             float vel_ms = _velocity_NED_m.length();
             float pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
@@ -600,56 +608,33 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
-        float throttle = 0.0f;
-        if (motors->get_spool_state() != AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
-            // // motors have not completed spool up yet so relax navigation and position controllers
-            // pos_control->relax_velocity_controller_xy();
-            // pos_control->update_xy_controller();
-            // pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
-            // pos_control->update_z_controller();
-            // attitude_control->reset_yaw_target_and_rate();
-            // attitude_control->reset_rate_controller_I_terms();
-            // attitude_control->input_thrust_vector_rate_heading(pos_control->get_thrust_vector(), 0.0f);
-        } else { // Motors are spooled up
-            // // now pitch is controlled by throttle, not just the relationship between motors, we need to use throttle to control pitch
-            // throttle = attitude_control->get_throttle_in();
-            // float current_pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
-            // float pitch_err = _wind_up_pitch_deg - current_pitch_deg;
-            // // Compute throttle adjustment using PID
-            // // Negative pitch needs more throttle, positive pitch needs less
-            // // Throttle is between 0 and 1
-            // // in 1 second, the max throttle we should go up is 10%
-            // // at worst case, pitch will be -90 (unlikely)
-            // float throttle_correction = pitch_err*THROTTLE_PITCH_CONTROL_GAIN;
-            // throttle_correction = constrain_float(throttle_correction, -MAX_THROTTLE_CORRECTION * G_Dt, MAX_THROTTLE_CORRECTION * G_Dt);
-            // throttle = throttle - throttle_correction; 
-            // throttle = constrain_float(throttle, 0.0f, 1.0f);
-
+        if (motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) { // Motors are spooled up
             // Compute throttle adjustment using PID
+            float last_throttle = _wind_up_throttle;
             float current_pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
-            throttle = -_thro_pitch_pid.update_all(_wind_up_pitch_deg, current_pitch_deg, G_Dt);
-            throttle = constrain_float(throttle, 0.0f, 1.0f);
+            float old_integrator = _thro_pitch_pid.get_i();
+            _wind_up_throttle = -_thro_pitch_pid.update_all(_wind_up_pitch_deg, current_pitch_deg, G_Dt) + throttle_hover();
+            // --- Slew Rate Limiter ---
+            // Calculate the maximum allowed change in throttle for this update cycle.
+            // G_Dt is the time step (in seconds) between updates.
+            float max_delta = _max_TP_throttle_rate * G_Dt;
+            float delta = _wind_up_throttle - last_throttle;
+            if (delta > max_delta) {
+                _wind_up_throttle = last_throttle + max_delta;
+                _thro_pitch_pid.set_integrator(old_integrator);
+            } else if (delta < -max_delta) {
+                _wind_up_throttle = last_throttle - max_delta;
+                _thro_pitch_pid.set_integrator(old_integrator);
+            }
+            // --- End Slew Rate Limiter ---
 
-            // float last_throttle = attitude_control->get_throttle_in();
-            // float throttle_change = throttle-last_throttle;
-            // if (throttle_change < -MAX_THROTTLE_CORRECTION * G_Dt) {
-            //     throttle = last_throttle + -MAX_THROTTLE_CORRECTION * G_Dt;
-            // } else if  (throttle_change > MAX_THROTTLE_CORRECTION * G_Dt) {
-            //     throttle = last_throttle + MAX_THROTTLE_CORRECTION * G_Dt;
-            // }
-            
-            attitude_control->set_throttle_out(throttle, false, 0.0f);
+            _wind_up_throttle = constrain_float(_wind_up_throttle, 0.0f, 1.0f);
+            attitude_control->set_throttle_out(_wind_up_throttle, false, 0.0f);
             attitude_control->relax_attitude_controllers();
-
-            // attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(
-            //     ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
-            //     current_pitch_deg*DEG_TO_CD, // current pitch
-            //     0.0f // zero yaw rate
-            // ); // might not be needed. or might need to change to target a specific yaw... removed because it affected the max throttle output we could get
         }
 
         lasmData data;
-        data.thr = throttle;
+        data.thr = _wind_up_throttle;
         data.rol = ahrs.get_roll()*RAD_TO_DEG;
         data.pit = ahrs.get_pitch()*RAD_TO_DEG;
         logLasm(data);
@@ -724,7 +709,12 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
             _recovery_position_NED_m.xy() = _cur_pos_NED_m.xy() - unit_heading_vec * BACKUP_RECOVERY_DIST_BACK_M;
             _recovery_position_NED_m.z = _cur_pos_NED_m.z - BACKUP_RECOVERY_DIST_UP_M; // subtract because NED not NEU!
         }
-        
+        if (!pos_control->is_active_z()) {
+            pos_control->init_z_controller();
+        }
+        if (!pos_control->is_active_xy()) {
+            pos_control->init_xy_controller();
+        }
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         
@@ -1017,8 +1007,8 @@ void ModeLoiterAssisted::unset_attitude_control_rate_limits() {
 
 
 void ModeLoiterAssisted::InitFilters() {
-    _dock_pos_filter.set_cutoff_frequency(_dock_pos_filt_hz.get()); 
-    _dock_norm_filter.set_cutoff_frequency(_dock_pos_filt_hz.get()); 
+    _dock_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get()); 
+    _dock_norm_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get()); 
     _dock_target_window_var = WindowVar(_wv_window_size.get()); // reinit with new min samples
     _yaw_buf = ModeLoiterAssisted::YawBuffer(); // reinit yaw buffer
 }
@@ -1026,10 +1016,10 @@ void ModeLoiterAssisted::InitFilters() {
 void ModeLoiterAssisted::updateFilterParams() {
     // check for filter change
     if (!is_equal(_dock_pos_filter.get_cutoff_freq(), _dock_pos_filt_hz.get())) { // TODO update to dock_hz
-        _dock_pos_filter.set_cutoff_frequency(_dock_pos_filt_hz.get());
+        _dock_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get());
     }
     if (!is_equal(_dock_norm_filter.get_cutoff_freq(), _dock_pos_filt_hz.get())) { // TODO update to dock_hz
-        _dock_norm_filter.set_cutoff_frequency(_dock_pos_filt_hz.get());
+        _dock_norm_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get());
     }
     if (!is_equal(_dock_target_window_var.get_window_size(), _wv_window_size.get())) {
         _dock_target_window_var.set_new_window_size(_wv_window_size.get());

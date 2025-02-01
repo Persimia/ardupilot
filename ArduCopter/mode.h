@@ -1305,7 +1305,7 @@ public:
     void run() override;
     void exit() override;
 
-    bool requires_GPS() const override { return true; }
+    bool requires_GPS() const override { return false; }
     bool has_manual_throttle() const override { return false; }
     bool allows_arming(AP_Arming::Method method) const override { return true; };
     bool is_autopilot() const override { return false; }
@@ -1349,6 +1349,7 @@ private:
     AP_Float _wind_down_decay_time_s; // seconds from current throttle to zero in linear decay
     AP_Float _lower_coast_in_pitch_bound_deg;
     AP_Float _upper_coast_in_pitch_bound_deg;
+    AP_Float _max_TP_throttle_rate;
 
 
     //====================================================================
@@ -1434,6 +1435,7 @@ private:
     void set_attitude_control_rate_limits(float limit_degs);
     void unset_attitude_control_rate_limits();
     void checkDockComms();
+    float _wind_up_throttle;
     float _heading_normal_error_deg;
     uint32_t _last_att_st_time;
     Vector3f _velocity_NED_m;
