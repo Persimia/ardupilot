@@ -601,51 +601,13 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
         float throttle = 0.0f;
-        if (motors->get_spool_state() != AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
-            // // motors have not completed spool up yet so relax navigation and position controllers
-            // pos_control->relax_velocity_controller_xy();
-            // pos_control->update_xy_controller();
-            // pos_control->relax_z_controller(0.0f);   // forces throttle output to decay to zero
-            // pos_control->update_z_controller();
-            // attitude_control->reset_yaw_target_and_rate();
-            // attitude_control->reset_rate_controller_I_terms();
-            // attitude_control->input_thrust_vector_rate_heading(pos_control->get_thrust_vector(), 0.0f);
-        } else { // Motors are spooled up
-            // // now pitch is controlled by throttle, not just the relationship between motors, we need to use throttle to control pitch
-            // throttle = attitude_control->get_throttle_in();
-            // float current_pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
-            // float pitch_err = _wind_up_pitch_deg - current_pitch_deg;
-            // // Compute throttle adjustment using PID
-            // // Negative pitch needs more throttle, positive pitch needs less
-            // // Throttle is between 0 and 1
-            // // in 1 second, the max throttle we should go up is 10%
-            // // at worst case, pitch will be -90 (unlikely)
-            // float throttle_correction = pitch_err*THROTTLE_PITCH_CONTROL_GAIN;
-            // throttle_correction = constrain_float(throttle_correction, -MAX_THROTTLE_CORRECTION * G_Dt, MAX_THROTTLE_CORRECTION * G_Dt);
-            // throttle = throttle - throttle_correction; 
-            // throttle = constrain_float(throttle, 0.0f, 1.0f);
-
+        if (motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) { // Motors are spooled up
             // Compute throttle adjustment using PID
             float current_pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
             throttle = -_thro_pitch_pid.update_all(_wind_up_pitch_deg, current_pitch_deg, G_Dt);
             throttle = constrain_float(throttle, 0.0f, 1.0f);
-
-            // float last_throttle = attitude_control->get_throttle_in();
-            // float throttle_change = throttle-last_throttle;
-            // if (throttle_change < -MAX_THROTTLE_CORRECTION * G_Dt) {
-            //     throttle = last_throttle + -MAX_THROTTLE_CORRECTION * G_Dt;
-            // } else if  (throttle_change > MAX_THROTTLE_CORRECTION * G_Dt) {
-            //     throttle = last_throttle + MAX_THROTTLE_CORRECTION * G_Dt;
-            // }
-            
             attitude_control->set_throttle_out(throttle, false, 0.0f);
             attitude_control->relax_attitude_controllers();
-
-            // attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(
-            //     ahrs.get_roll()*RAD_TO_DEG*DEG_TO_CD, // current roll
-            //     current_pitch_deg*DEG_TO_CD, // current pitch
-            //     0.0f // zero yaw rate
-            // ); // might not be needed. or might need to change to target a specific yaw... removed because it affected the max throttle output we could get
         }
 
         lasmData data;
