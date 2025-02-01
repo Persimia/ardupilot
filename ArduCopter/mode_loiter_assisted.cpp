@@ -203,7 +203,7 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
 
     // Failsafes
     if (copter.failsafe.radio) {return false;}// TODO what failsafe mode should we use?
-    if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m)) {return false;}
+    // if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m)) {return false;}
     float target_climb_rate_cm_s = get_pilot_desired_climb_rate(channel_throttle->get_control_in());
     target_climb_rate_cm_s = constrain_float(target_climb_rate_cm_s, -get_pilot_speed_dn(), g.pilot_speed_up);
     AltHoldModeState alt_hold_state = get_alt_hold_state(target_climb_rate_cm_s);
@@ -219,7 +219,7 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     InitFilters();
 
     // Set State (assuming not attached for now)
-    TRAN(&ModeLoiterAssisted::Default);
+    TRAN(&ModeLoiterAssisted::Vegetable);
     (this->*_lass_state)(Event::ENTRY_SIG); // perform entry actions
 
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Mode set to Loiter Assisted");
@@ -236,14 +236,14 @@ void ModeLoiterAssisted::run()
     }  
     #endif
 
-    if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m) || !ahrs.get_velocity_NED(_velocity_NED_m)) {
-        GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"No pos or vel estimate!");
-        abortExit();
-    }
+    // if (!ahrs.get_relative_position_NED_origin(_cur_pos_NED_m) || !ahrs.get_velocity_NED(_velocity_NED_m)) {
+    //     GCS_SEND_TEXT(MAV_SEVERITY_EMERGENCY,"No pos or vel estimate!");
+    //     abortExit();
+    // }
 
     checkDockComms();
     updateFilterParams(); // Update filters (simply check for param changes)
-    findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
+    // findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
     evaluateFlags(); // evaluate some flags
     sendFlagFeedback(); // send pilot feedback on flags
     
@@ -587,8 +587,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         _is_taking_off = false;
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.VEHICLE_STATIONARY && _flags.AT_WIND_UP_PITCH && _flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
-        else if (_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::WindDown);} 
+        // if (_flags.VEHICLE_STATIONARY && _flags.AT_WIND_UP_PITCH && _flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
+        if (_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::WindDown);} 
         else {
             float vel_ms = _velocity_NED_m.length();
             float pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
@@ -724,7 +724,12 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
             _recovery_position_NED_m.xy() = _cur_pos_NED_m.xy() - unit_heading_vec * BACKUP_RECOVERY_DIST_BACK_M;
             _recovery_position_NED_m.z = _cur_pos_NED_m.z - BACKUP_RECOVERY_DIST_UP_M; // subtract because NED not NEU!
         }
-        
+        if (!pos_control->is_active_z()) {
+            pos_control->init_z_controller();
+        }
+        if (!pos_control->is_active_xy()) {
+            pos_control->init_xy_controller();
+        }
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         
@@ -1017,8 +1022,8 @@ void ModeLoiterAssisted::unset_attitude_control_rate_limits() {
 
 
 void ModeLoiterAssisted::InitFilters() {
-    _dock_pos_filter.set_cutoff_frequency(_dock_pos_filt_hz.get()); 
-    _dock_norm_filter.set_cutoff_frequency(_dock_pos_filt_hz.get()); 
+    _dock_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get()); 
+    _dock_norm_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get()); 
     _dock_target_window_var = WindowVar(_wv_window_size.get()); // reinit with new min samples
     _yaw_buf = ModeLoiterAssisted::YawBuffer(); // reinit yaw buffer
 }
@@ -1026,10 +1031,10 @@ void ModeLoiterAssisted::InitFilters() {
 void ModeLoiterAssisted::updateFilterParams() {
     // check for filter change
     if (!is_equal(_dock_pos_filter.get_cutoff_freq(), _dock_pos_filt_hz.get())) { // TODO update to dock_hz
-        _dock_pos_filter.set_cutoff_frequency(_dock_pos_filt_hz.get());
+        _dock_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get());
     }
     if (!is_equal(_dock_norm_filter.get_cutoff_freq(), _dock_pos_filt_hz.get())) { // TODO update to dock_hz
-        _dock_norm_filter.set_cutoff_frequency(_dock_pos_filt_hz.get());
+        _dock_norm_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get());
     }
     if (!is_equal(_dock_target_window_var.get_window_size(), _wv_window_size.get())) {
         _dock_target_window_var.set_new_window_size(_wv_window_size.get());
