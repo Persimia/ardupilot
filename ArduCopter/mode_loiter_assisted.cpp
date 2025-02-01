@@ -27,6 +27,7 @@
 #define DEFAULT_WINDDOWN_DECAY_TIME_S        6.0f // time to winddown throttle in seconds 
 #define DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
 #define DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG     -2.0f
+#define DEFAULT_MAX_TP_THROTTLE_RATE        0.1f // ten percent throttle per second default (~3-4 sec for hover throttle)
 
 
 // Hard coded parameters
@@ -183,6 +184,12 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("CIP_MAX", 20, ModeLoiterAssisted, _upper_coast_in_pitch_bound_deg, DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG),
 
+    // @Param{Copter}: TP_SLEW
+    // @DisplayName: Max rate of change of throttle in 0-1 units per second
+    // @Description: Max rate of change of throttle in 0-1 units per second
+    // @Units: units/s
+    // @User: Advanced
+    AP_GROUPINFO("TP_SLEW", 21, ModeLoiterAssisted, _max_TP_throttle_rate, DEFAULT_MAX_TP_THROTTLE_RATE),
     AP_GROUPEND
 };
 
@@ -578,10 +585,11 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         set_land_complete(false);
         attitude_control->reset_rate_controller_I_terms();
         attitude_control->reset_target_and_rate();
-        _wind_up_start_ms = millis();
+        // _wind_up_start_ms = millis();
         attitude_control->set_throttle_out(0.0f, false, 0.0f); // Start at zero throttle
         _thro_pitch_pid.reset_filter();
         _thro_pitch_pid.reset_I();
+        _wind_up_throttle = 0.0f;
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         _is_taking_off = false;
@@ -600,18 +608,33 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
-        float throttle = 0.0f;
         if (motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) { // Motors are spooled up
             // Compute throttle adjustment using PID
+            float last_throttle = _wind_up_throttle;
             float current_pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
-            throttle = -_thro_pitch_pid.update_all(_wind_up_pitch_deg, current_pitch_deg, G_Dt);
-            throttle = constrain_float(throttle, 0.0f, 1.0f);
-            attitude_control->set_throttle_out(throttle, false, 0.0f);
+            float old_integrator = _thro_pitch_pid.get_i();
+            _wind_up_throttle = -_thro_pitch_pid.update_all(_wind_up_pitch_deg, current_pitch_deg, G_Dt) + throttle_hover();
+            // --- Slew Rate Limiter ---
+            // Calculate the maximum allowed change in throttle for this update cycle.
+            // G_Dt is the time step (in seconds) between updates.
+            float max_delta = _max_TP_throttle_rate * G_Dt;
+            float delta = _wind_up_throttle - last_throttle;
+            if (delta > max_delta) {
+                _wind_up_throttle = last_throttle + max_delta;
+                _thro_pitch_pid.set_integrator(old_integrator);
+            } else if (delta < -max_delta) {
+                _wind_up_throttle = last_throttle - max_delta;
+                _thro_pitch_pid.set_integrator(old_integrator);
+            }
+            // --- End Slew Rate Limiter ---
+
+            _wind_up_throttle = constrain_float(_wind_up_throttle, 0.0f, 1.0f);
+            attitude_control->set_throttle_out(_wind_up_throttle, false, 0.0f);
             attitude_control->relax_attitude_controllers();
         }
 
         lasmData data;
-        data.thr = throttle;
+        data.thr = _wind_up_throttle;
         data.rol = ahrs.get_roll()*RAD_TO_DEG;
         data.pit = ahrs.get_pitch()*RAD_TO_DEG;
         logLasm(data);
