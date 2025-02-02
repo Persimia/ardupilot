@@ -34,7 +34,7 @@
 #define WIND_UP_PITCH_TOL_DEG              0.5f   
 #define RECOVERY_DIST_THRESH_CM            50.0f
 #define COAST_OUT_DIST_CM                  40.0f
-#define HEADING_NORMAL_TOL_DEG             5.0f    // degrees between heading and dock surface normal. Change this?? 
+#define HEADING_NORMAL_TOL_DEG             10.0f    // degrees between heading and dock surface normal. Change this?? 
 #define MAX_THROTTLE_CORRECTION            0.1f    // thr_ratio_units per second 0.0 - 1.0
 #define THROTTLE_PITCH_CONTROL_GAIN        0.001f   // thr_ratio_units/deg/step. In wind up, controls throttle to pitch angle controller
 #define ATT_CONTROL_RATE_LIM_DEG_S         2.0f  
@@ -418,7 +418,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.WITHIN_COAST_IN_DIST) {status = TRAN(&ModeLoiterAssisted::CoastIn);}
-        else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::CoastIn);}
         else if (!_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::Lass);}
         else {}
         break;}
@@ -466,7 +466,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);}
         // else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
-        else if (_flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::WindDown);}
+        else if (_flags.WU_WD_CONFIRMATION && _flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::WindDown);}
         else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
@@ -556,7 +556,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::WindUp);}
+        if (!_flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::WindUp);}
         // TODO add falling check
         // else {}
         break;}
@@ -595,7 +595,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         _is_taking_off = false;
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.VEHICLE_STATIONARY && _flags.AT_WIND_UP_PITCH && _flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
+        if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
+        // if (_flags.VEHICLE_STATIONARY && _flags.AT_WIND_UP_PITCH && _flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
         else if (_flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::WindDown);} 
         else {
             float vel_ms = _velocity_NED_m.length();
