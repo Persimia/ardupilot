@@ -1336,7 +1336,7 @@ private:
     AP_Float _dock_speed_cm_s;
     AP_Float _undock_speed_cm_s;
     AP_Float _coast_in_dist_cm;
-    AP_Float _wind_up_pitch_deg;
+    AP_Float _coast_out_pitch_deg;
     AP_Float _thro_pitch_p;
     AP_Float _thro_pitch_i;
     AP_Float _thro_pitch_d;
@@ -1349,6 +1349,7 @@ private:
     AP_Float _lower_coast_in_pitch_bound_deg;
     AP_Float _upper_coast_in_pitch_bound_deg;
     AP_Float _max_TP_throttle_rate;
+    AP_Float _delta_wind_up_pitch_deg;
 
 
     //====================================================================
@@ -1371,7 +1372,7 @@ private:
         bool AT_RECOVERY_POSITION = false;
         bool BEYOND_COAST_OUT_DIST = false;
         bool THROTTLE_WOUND_DOWN = false;
-        bool AT_WIND_UP_PITCH = false;
+        bool AT_WIND_UP_THROTTLE = false;
         bool HEADING_NORMAL_ALIGNED = false;
         bool DETACH_BUTTON_PRESSED = false;
         bool DOCK_COMMS_HEALTHY = false;
@@ -1435,6 +1436,7 @@ private:
     void set_attitude_control_rate_limits(float limit_degs);
     void unset_attitude_control_rate_limits();
     void checkDockComms();
+    float _wind_up_pitch_deg;
     float _wind_up_throttle;
     float _heading_normal_error_deg;
     uint32_t _last_att_st_time;

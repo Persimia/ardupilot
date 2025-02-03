@@ -15,7 +15,7 @@
 #define DOCK_SPEED_CM_S_DEFAULT              20.0f
 #define UNDOCK_SPEED_CM_S_DEFAULT            50.0f
 #define CID_CM_DEFAULT                       80.0f // coast in distance
-#define WUP_DEG_DEFAULT                      5.0f
+#define COP_DEG_DEFAULT                      5.0f
 #define DEFAULT_THRO_PITCH_P_GAIN            0.01f  // initial P gain
 #define DEFAULT_THRO_PITCH_I_GAIN            0.0f // initial I gain
 #define DEFAULT_THRO_PITCH_D_GAIN            0.002f // initial D gain
@@ -28,7 +28,7 @@
 #define DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
 #define DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG     -2.0f
 #define DEFAULT_MAX_TP_THROTTLE_RATE        1.0f // ten percent throttle per second default (~3-4 sec for hover throttle)
-
+#define DEFAULT_DELTA_WIND_UP_PITCH_DEG      2.0f
 
 // Hard coded parameters
 #define WIND_UP_PITCH_TOL_DEG              0.5f   
@@ -41,7 +41,7 @@
 #define BACKUP_RECOVERY_DIST_BACK_M        1.5f  // distance back from current pos the recovery target will be set to
 #define BACKUP_RECOVERY_DIST_UP_M          0.25f  // distance up from current pos the recovery target will be set to
 #define DOCK_COMMS_PERIOD_MS               1500  // when the dock expects an att_st message heartbeat
-
+#define WIND_UP_THROTTLE_HOVER_THRESHOLD   0.8f // we need to be at 80% of the hover throttle threshold to be considered wound up
 // Misc defines
 #define DEG_TO_CD                       100.0f // centidegrees per degree
 #define M_TO_CM                         100.0f // centimeters per meter
@@ -107,12 +107,12 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("CID_CM", 8, ModeLoiterAssisted, _coast_in_dist_cm, CID_CM_DEFAULT),
 
-    // @Param{Copter}: WUP_DEG
+    // @Param{Copter}: COP_DEG
     // @DisplayName: Wind up pitch angle for wind up to target in degrees
     // @Description: Wind up pitch angle for wind up to target in degrees
     // @Units: deg
     // @User: Advanced
-    AP_GROUPINFO("WUP_DEG", 9, ModeLoiterAssisted, _wind_up_pitch_deg, WUP_DEG_DEFAULT),
+    AP_GROUPINFO("COP_DEG", 9, ModeLoiterAssisted, _coast_out_pitch_deg, COP_DEG_DEFAULT),
 
     // @Param{Copter}: TP_P
     // @DisplayName: Wind up pitch angle for wind up to target in degrees
@@ -190,6 +190,14 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Units: units/s
     // @User: Advanced
     AP_GROUPINFO("TP_SLEW", 21, ModeLoiterAssisted, _max_TP_throttle_rate, DEFAULT_MAX_TP_THROTTLE_RATE),
+    
+    // @Param{Copter}: TP_SLEW
+    // @DisplayName: Max rate of change of throttle in 0-1 units per second
+    // @Description: Max rate of change of throttle in 0-1 units per second
+    // @Units: units/s
+    // @User: Advanced
+    AP_GROUPINFO("DWUP_DEG", 22, ModeLoiterAssisted, _delta_wind_up_pitch_deg, DEFAULT_DELTA_WIND_UP_PITCH_DEG),
+    
     AP_GROUPEND
 };
 
@@ -597,14 +605,15 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         _wind_up_throttle = 0.0f;
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
         motors->disable_throttle_hover_learn(true);
+        _wind_up_pitch_deg = ahrs.get_pitch()*RAD_TO_DEG - _delta_wind_up_pitch_deg;
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         _is_taking_off = false;
         motors->disable_throttle_hover_learn(false);
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
-        // if (_flags.VEHICLE_STATIONARY && _flags.AT_WIND_UP_PITCH && _flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
+        // if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
+        if (_flags.AT_WIND_UP_THROTTLE && _flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
         else if (_flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::WindDown);} 
         else {
             float vel_ms = _velocity_NED_m.length();
@@ -687,13 +696,13 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastOut(const Event e) {
         // Flight Code
         pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
         pos_control->update_z_controller();
-        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _wind_up_pitch_deg*DEG_TO_CD, 0.0f);
+        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _coast_out_pitch_deg*DEG_TO_CD, 0.0f);
         
         // float thr_out = throttle_hover();
         // attitude_control->set_throttle_out(thr_out, true, POSCONTROL_THROTTLE_CUTOFF_FREQ_HZ);
 
         lasmData data;
-        data.pit = _wind_up_pitch_deg;
+        data.pit = _coast_out_pitch_deg;
         logLasm(data);
 
         break;}
@@ -903,7 +912,7 @@ void ModeLoiterAssisted::logLass() {
     flags_bitmask |= (_flags.AT_RECOVERY_POSITION ? 1 : 0) << 6;
     flags_bitmask |= (_flags.BEYOND_COAST_OUT_DIST ? 1 : 0) << 7;
     flags_bitmask |= (_flags.THROTTLE_WOUND_DOWN ? 1 : 0) << 8;
-    flags_bitmask |= (_flags.AT_WIND_UP_PITCH ? 1 : 0) << 9;
+    flags_bitmask |= (_flags.AT_WIND_UP_THROTTLE ? 1 : 0) << 9;
     flags_bitmask |= (_flags.HEADING_NORMAL_ALIGNED ? 1 : 0) << 10;
     flags_bitmask |= (_flags.DETACH_BUTTON_PRESSED ? 1 : 0) << 11;
     flags_bitmask |= (_flags.DOCK_COMMS_HEALTHY ? 1 : 0) << 12;
@@ -960,7 +969,7 @@ void ModeLoiterAssisted::evaluateFlags() { // ALL FLAGS MUST BE SET TO FALSE INI
     _flags.AT_RECOVERY_POSITION = false;
     _flags.BEYOND_COAST_OUT_DIST = false;
     _flags.VEHICLE_STATIONARY = false;
-    _flags.AT_WIND_UP_PITCH = false;
+    _flags.AT_WIND_UP_THROTTLE = false;
 
     // Check if we are at the recovery position
     float dist_to_recovery_pos_cm = (_recovery_position_NED_m-_cur_pos_NED_m).length()*M_TO_CM;
@@ -989,7 +998,7 @@ void ModeLoiterAssisted::evaluateFlags() { // ALL FLAGS MUST BE SET TO FALSE INI
     _flags.VEHICLE_STATIONARY = (_velocity_NED_m.length() <= _stationary_vel_m_s.get());
 
     // Check if we are at the wind up pitch
-    _flags.AT_WIND_UP_PITCH = abs(ahrs.get_pitch()*RAD_TO_DEG - _wind_up_pitch_deg) < WIND_UP_PITCH_TOL_DEG;
+    _flags.AT_WIND_UP_THROTTLE = motors->get_throttle_out() > motors->get_throttle_hover()*WIND_UP_THROTTLE_HOVER_THRESHOLD;
 }
 
 void ModeLoiterAssisted::abortExit() {
