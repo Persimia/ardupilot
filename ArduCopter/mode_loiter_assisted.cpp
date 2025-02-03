@@ -460,8 +460,10 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
         _crash_check_enabled = false;
         _coast_in_pitch_cd = pos_control->get_pitch_cd();
         _coast_in_pitch_cd = constrain_float(_coast_in_pitch_cd, _lower_coast_in_pitch_bound_deg*DEG_TO_CD, _upper_coast_in_pitch_bound_deg*DEG_TO_CD); // constrain
+        motors->disable_throttle_hover_learn(true);
         break;}
-    case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+    case Event::EXIT_SIG:{ 
+        motors->disable_throttle_hover_learn(false);
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);}
@@ -503,9 +505,11 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
         _wind_down_start_ms = millis();
         attitude_control->landed_gain_reduction(true);
         _flags.THROTTLE_WOUND_DOWN = false;
+        motors->disable_throttle_hover_learn(true);
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         _flags.THROTTLE_WOUND_DOWN = false;
+        motors->disable_throttle_hover_learn(false);
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.VEHICLE_STATIONARY && _flags.THROTTLE_WOUND_DOWN) {status = TRAN(&ModeLoiterAssisted::Vegetable);} // are both necessary?
@@ -550,10 +554,11 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = false;
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::SHUT_DOWN);
+        motors->disable_throttle_hover_learn(true);
         // _docked_position_NED_m = _cur_pos_NED_m;
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
-        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        motors->disable_throttle_hover_learn(false);
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (!_flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::WindUp);}
@@ -590,9 +595,12 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         _thro_pitch_pid.reset_filter();
         _thro_pitch_pid.reset_I();
         _wind_up_throttle = 0.0f;
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        motors->disable_throttle_hover_learn(true);
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         _is_taking_off = false;
+        motors->disable_throttle_hover_learn(false);
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
@@ -666,9 +674,10 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastOut(const Event e) {
         pos_control->init_xy_controller();
         pos_control->init_z_controller();   
         _docked_position_NED_m = _cur_pos_NED_m;
-        
+        motors->disable_throttle_hover_learn(true);
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
+        motors->disable_throttle_hover_learn(false);
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.BEYOND_COAST_OUT_DIST) {status = TRAN(&ModeLoiterAssisted::Recover);}
@@ -791,6 +800,13 @@ void ModeLoiterAssisted::runFlightCode() {
     }
 }
 
+void ModeLoiterAssisted::runExitCode() {
+    Status status = (this->*_lass_state)(Event::EXIT_SIG);
+    // We can do something with status if we need to now
+    if (status == Status::TRAN_STATUS) {
+        //ignore for now
+    }
+}
 
 
 
@@ -987,6 +1003,7 @@ void ModeLoiterAssisted::abortExit() {
 // send exit lass message
 void ModeLoiterAssisted::exit()
 {
+    runExitCode();
     gcs().send_named_float("lass", 9);
 }
 

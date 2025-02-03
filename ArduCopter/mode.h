@@ -1323,7 +1323,6 @@ public:
     static const struct AP_Param::GroupInfo var_info[];
 
 protected:
-
     const char *name() const override { return "LOITER_ASSISTED"; }
     const char *name4() const override { return "LASS"; }
 
@@ -1388,6 +1387,7 @@ private:
     typedef Status (ModeLoiterAssisted::*StateHandler)(const Event e);
     void evaluate_transitions();
     void runFlightCode();
+    void runExitCode();
     Flags evaluate_flags();
     /*---------------------------------------------------------------------------*/
     /* Finite State Machine States... */
