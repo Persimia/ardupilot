@@ -1532,49 +1532,6 @@ private:
     
     WindowVar _dock_target_window_var;
     bool _ready_to_dock{false};
-
-    
-
-    uint32_t _last_millis;
-    class YawBuffer {
-        public:
-            YawBuffer() : YawBuffer(100) {}
-            YawBuffer(uint32_t buffer_size) : _size(buffer_size), _buffer(buffer_size, 0.0f), _times(buffer_size, 0), index(0) {}
-            bool looped = false;
-            uint32_t index;                 // Current index in the buffer
-
-            // Add a new yaw value to the buffer
-            void addYaw(float yaw) {
-                _buffer[index] = yaw;
-                _times[index] = AP_HAL::millis();
-                if (index + 1 > _size) {
-                    looped = true;
-                }
-                index = (index + 1) % _size; // Circular increment
-            }
-
-            // Get the yaw value with the specified delay in milliseconds
-            bool getDelayedYaw(uint32_t time_delay, float& delayed_yaw) const {
-                for (uint32_t i = 0; i < _size; ++i) {
-                    uint32_t idx = (index + _size - i - 1) % _size; // Traverse backward through buffer
-                    if (looped || idx < index) {
-                        if ((AP_HAL::millis() - _times[idx]) >= time_delay && _times[idx] > 0) {
-                            delayed_yaw = _buffer[idx];
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            }
-
-        private:
-            uint32_t _size;                  // Size of the buffer
-            std::vector<float> _buffer; // Circular buffer to store yaw values
-            std::vector<float> _times; // Circular buffer to store time values
-            
-            
-    };
-    YawBuffer _yaw_buf;
 };
 
 

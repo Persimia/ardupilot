@@ -21,8 +21,8 @@
 #define DEFAULT_THRO_PITCH_D_GAIN            0.002f // initial D gain
 #define DEFAULT_THRO_PITCH_FF_GAIN           0.0f  // initial feed-forward (FF)
 #define DEFAULT_THRO_PITCH_IMAX              0.5f // integrator max  is half throttle
-#define DEFAULT_THRO_PITCH_ERR_HZ            400.0f // error filter frequency in Hz
-#define DEFAULT_THRO_PITCH_D_HZ              400.0f  // derivative filter frequency in Hz
+#define DEFAULT_THRO_PITCH_ERR_HZ            200.0f // error filter frequency in Hz
+#define DEFAULT_THRO_PITCH_D_HZ              200.0f  // derivative filter frequency in Hz
 #define DEFAULT_STATIONARY_VEL_M_S           0.05f    // vehicle velocity must be under m/s
 #define DEFAULT_WINDDOWN_DECAY_TIME_S        6.0f // time to winddown throttle in seconds 
 #define DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
@@ -1028,7 +1028,9 @@ void ModeLoiterAssisted::InitFilters() {
     _dock_pos_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get()); 
     _dock_norm_filter.set_cutoff_frequency(copter.scheduler.get_loop_rate_hz(), _dock_pos_filt_hz.get()); 
     _dock_target_window_var = WindowVar(_wv_window_size.get()); // reinit with new min samples
-    _yaw_buf = ModeLoiterAssisted::YawBuffer(); // reinit yaw buffer
+    _dock_pos_filter.reset();
+    _dock_norm_filter.reset();
+    _dock_target_window_var.reset();
 }
 
 void ModeLoiterAssisted::updateFilterParams() {
