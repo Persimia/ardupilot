@@ -1299,7 +1299,7 @@ public:
     ModeLoiterAssisted(void);
     // inherit constructor
     using Mode::Mode;
-    Number mode_number() const override { return Number::LOITER_ASSISTED; }
+    Number mode_number() const override { return Number::LOITER_ASSISTED; } 
 
     bool init(bool ignore_checks) override;
     void run() override;
@@ -1323,7 +1323,6 @@ public:
     static const struct AP_Param::GroupInfo var_info[];
 
 protected:
-
     const char *name() const override { return "LOITER_ASSISTED"; }
     const char *name4() const override { return "LASS"; }
 
@@ -1337,7 +1336,7 @@ private:
     AP_Float _dock_speed_cm_s;
     AP_Float _undock_speed_cm_s;
     AP_Float _coast_in_dist_cm;
-    AP_Float _wind_up_pitch_deg;
+    AP_Float _coast_out_pitch_deg;
     AP_Float _thro_pitch_p;
     AP_Float _thro_pitch_i;
     AP_Float _thro_pitch_d;
@@ -1347,6 +1346,10 @@ private:
     AP_Float _thro_pitch_d_hz;
     AP_Float _stationary_vel_m_s;
     AP_Float _wind_down_decay_time_s; // seconds from current throttle to zero in linear decay
+    AP_Float _lower_coast_in_pitch_bound_deg;
+    AP_Float _upper_coast_in_pitch_bound_deg;
+    AP_Float _max_TP_throttle_rate;
+    AP_Float _delta_wind_up_pitch_deg;
 
 
     //====================================================================
@@ -1369,7 +1372,7 @@ private:
         bool AT_RECOVERY_POSITION = false;
         bool BEYOND_COAST_OUT_DIST = false;
         bool THROTTLE_WOUND_DOWN = false;
-        bool AT_WIND_UP_PITCH = false;
+        bool AT_WIND_UP_THROTTLE = false;
         bool HEADING_NORMAL_ALIGNED = false;
         bool DETACH_BUTTON_PRESSED = false;
         bool DOCK_COMMS_HEALTHY = false;
@@ -1385,6 +1388,7 @@ private:
     typedef Status (ModeLoiterAssisted::*StateHandler)(const Event e);
     void evaluate_transitions();
     void runFlightCode();
+    void runExitCode();
     Flags evaluate_flags();
     /*---------------------------------------------------------------------------*/
     /* Finite State Machine States... */
@@ -1432,6 +1436,8 @@ private:
     void set_attitude_control_rate_limits(float limit_degs);
     void unset_attitude_control_rate_limits();
     void checkDockComms();
+    float _wind_up_pitch_deg;
+    float _wind_up_throttle;
     float _heading_normal_error_deg;
     uint32_t _last_att_st_time;
     Vector3f _velocity_NED_m;
@@ -1528,49 +1534,6 @@ private:
     
     WindowVar _dock_target_window_var;
     bool _ready_to_dock{false};
-
-    
-
-    uint32_t _last_millis;
-    class YawBuffer {
-        public:
-            YawBuffer() : YawBuffer(100) {}
-            YawBuffer(uint32_t buffer_size) : _size(buffer_size), _buffer(buffer_size, 0.0f), _times(buffer_size, 0), index(0) {}
-            bool looped = false;
-            uint32_t index;                 // Current index in the buffer
-
-            // Add a new yaw value to the buffer
-            void addYaw(float yaw) {
-                _buffer[index] = yaw;
-                _times[index] = AP_HAL::millis();
-                if (index + 1 > _size) {
-                    looped = true;
-                }
-                index = (index + 1) % _size; // Circular increment
-            }
-
-            // Get the yaw value with the specified delay in milliseconds
-            bool getDelayedYaw(uint32_t time_delay, float& delayed_yaw) const {
-                for (uint32_t i = 0; i < _size; ++i) {
-                    uint32_t idx = (index + _size - i - 1) % _size; // Traverse backward through buffer
-                    if (looped || idx < index) {
-                        if ((AP_HAL::millis() - _times[idx]) >= time_delay && _times[idx] > 0) {
-                            delayed_yaw = _buffer[idx];
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            }
-
-        private:
-            uint32_t _size;                  // Size of the buffer
-            std::vector<float> _buffer; // Circular buffer to store yaw values
-            std::vector<float> _times; // Circular buffer to store time values
-            
-            
-    };
-    YawBuffer _yaw_buf;
 };
 
 

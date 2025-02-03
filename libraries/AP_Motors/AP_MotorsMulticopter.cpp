@@ -505,6 +505,15 @@ void AP_MotorsMulticopter::update_throttle_hover(float dt)
         _throttle_hover.set(constrain_float(_throttle_hover + (dt / (dt + AP_MOTORS_THST_HOVER_TC)) * (get_throttle() - _throttle_hover), AP_MOTORS_THST_HOVER_MIN, AP_MOTORS_THST_HOVER_MAX));
     }
 }
+void AP_MotorsMulticopter::disable_throttle_hover_learn(bool set_or_unset){
+    static uint8_t _original_throttle_hover_learn = _throttle_hover_learn;
+    if (set_or_unset) {
+        _throttle_hover_learn.set(false);
+    } else {
+        _throttle_hover_learn.set(_original_throttle_hover_learn);
+    }
+    
+} 
 
 // run spool logic
 void AP_MotorsMulticopter::output_logic()
