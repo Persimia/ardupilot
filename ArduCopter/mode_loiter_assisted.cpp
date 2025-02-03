@@ -469,6 +469,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
         _coast_in_pitch_cd = pos_control->get_pitch_cd();
         _coast_in_pitch_cd = constrain_float(_coast_in_pitch_cd, _lower_coast_in_pitch_bound_deg*DEG_TO_CD, _upper_coast_in_pitch_bound_deg*DEG_TO_CD); // constrain
         motors->disable_throttle_hover_learn(true);
+        _thro_pitch_pid.reset_filter();
+        _thro_pitch_pid.reset_I();
         break;}
     case Event::EXIT_SIG:{ 
         motors->disable_throttle_hover_learn(false);
@@ -481,12 +483,19 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
-        pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
-        pos_control->update_z_controller();
-        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _coast_in_pitch_cd, 0.0f);
+        if (!_flags.ATTACHED){
+            pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
+            pos_control->update_z_controller();
+            attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _coast_in_pitch_cd, 0.0f);
+        } 
+        else {
+            float current_pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
+            float throttle = -_thro_pitch_pid.update_all(_coast_in_pitch_cd/DEG_TO_CD, current_pitch_deg, G_Dt) + throttle_hover();
 
-        // float thr_out = throttle_hover();
-        // attitude_control->set_throttle_out(thr_out, true, POSCONTROL_THROTTLE_CUTOFF_FREQ_HZ);
+            throttle = constrain_float(throttle, 0.0f, 1.0f);
+            attitude_control->set_throttle_out(throttle, false, g.throttle_filt);
+            attitude_control->relax_attitude_controllers();
+        }
 
         lasmData data;
         data.hdg = _locked_heading_deg;
@@ -599,7 +608,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         attitude_control->reset_rate_controller_I_terms();
         attitude_control->reset_target_and_rate();
         // _wind_up_start_ms = millis();
-        attitude_control->set_throttle_out(0.0f, false, 0.0f); // Start at zero throttle
+        attitude_control->set_throttle_out(0.0f, false, g.throttle_filt); // Start at zero throttle
         _thro_pitch_pid.reset_filter();
         _thro_pitch_pid.reset_I();
         _wind_up_throttle = 0.0f;
@@ -647,7 +656,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
             // --- End Slew Rate Limiter ---
 
             _wind_up_throttle = constrain_float(_wind_up_throttle, 0.0f, 1.0f);
-            attitude_control->set_throttle_out(_wind_up_throttle, false, 0.0f);
+            attitude_control->set_throttle_out(_wind_up_throttle, false, g.throttle_filt);
             attitude_control->relax_attitude_controllers();
         }
 
@@ -697,9 +706,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastOut(const Event e) {
         pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
         pos_control->update_z_controller();
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, _coast_out_pitch_deg*DEG_TO_CD, 0.0f);
-        
-        // float thr_out = throttle_hover();
-        // attitude_control->set_throttle_out(thr_out, true, POSCONTROL_THROTTLE_CUTOFF_FREQ_HZ);
 
         lasmData data;
         data.pit = _coast_out_pitch_deg;
