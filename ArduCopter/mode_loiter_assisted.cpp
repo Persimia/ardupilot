@@ -8,7 +8,7 @@
 
 // Parameter defaults
 #define VEL_MAX_DEFAULT                      100.0f
-#define MIN_OBS_DIST_CM_DEFAULT              120.0f // closest you can get to obstacle in lass
+#define MIN_OBS_DIST_CM_DEFAULT              180.0f // closest you can get to obstacle in lass
 #define POS_HZ_DEFAULT                       2.0f // lower means less trust of new measurements
 #define WV_WIND_DEFAULT                      5
 #define WV_THRESH_DEFAULT                    0.1f 
