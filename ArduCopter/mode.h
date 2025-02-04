@@ -1388,7 +1388,7 @@ private:
     typedef Status (ModeLoiterAssisted::*StateHandler)(const Event e);
     void evaluate_transitions();
     void runFlightCode();
-    void runExitCode();
+    void runStateExitCode();
     Flags evaluate_flags();
     /*---------------------------------------------------------------------------*/
     /* Finite State Machine States... */

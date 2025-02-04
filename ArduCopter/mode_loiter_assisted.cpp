@@ -7,7 +7,7 @@
 #if MODE_LOITER_ASSISTED_ENABLED == ENABLED
 
 // Parameter defaults
-#define VEL_MAX_DEFAULT                      50.0f
+#define VEL_MAX_DEFAULT                      100.0f
 #define MIN_OBS_DIST_CM_DEFAULT              120.0f // closest you can get to obstacle in lass
 #define POS_HZ_DEFAULT                       2.0f // lower means less trust of new measurements
 #define WV_WIND_DEFAULT                      5
@@ -42,6 +42,9 @@
 #define BACKUP_RECOVERY_DIST_UP_M          0.25f  // distance up from current pos the recovery target will be set to
 #define DOCK_COMMS_PERIOD_MS               1500  // when the dock expects an att_st message heartbeat
 #define WIND_UP_THROTTLE_HOVER_THRESHOLD   0.8f // we need to be at 80% of the hover throttle threshold to be considered wound up
+#define LOITER_ASSISTED_ACCELMAX_CMS       200.0f   
+#define LEADUP_ACCELMAX_CMSS               125.0f
+
 // Misc defines
 #define DEG_TO_CD                       100.0f // centidegrees per degree
 #define M_TO_CM                         100.0f // centimeters per meter
@@ -228,6 +231,8 @@ bool ModeLoiterAssisted::init(bool ignore_checks)
     if (!pos_control->is_active_z()) {pos_control->init_z_controller();}
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
     pos_control->set_correction_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
+    pos_control->set_max_speed_accel_xy(_vel_max_cm_s, LOITER_ASSISTED_ACCELMAX_CMS);
+    pos_control->set_correction_speed_accel_xy(_vel_max_cm_s, LOITER_ASSISTED_ACCELMAX_CMS);
     copter.set_simple_mode(Copter::SimpleMode::NONE); // disable simple mode for this mode. TODO: Validate
 
     // Initialize all filters owned by this mode
@@ -421,11 +426,11 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         _recovery_position_NED_m = _cur_pos_NED_m;
         _locked_dock_pos_NE_m = _filt_dock_xyz_NEU_m.xy();
 
-        pos_control->set_max_speed_accel_xy(_dock_speed_cm_s, 125.0f);
+        pos_control->set_max_speed_accel_xy(_dock_speed_cm_s, LEADUP_ACCELMAX_CMSS);
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         _locked_dock_pos_NE_m = Vector2f(INFINITY, INFINITY); // get rid of locked dock target because we don't care if we leave leadup
-        pos_control->set_max_speed_accel_xy(POSCONTROL_SPEED, POSCONTROL_ACCEL_XY);
+        pos_control->set_max_speed_accel_xy(_vel_max_cm_s, LOITER_ASSISTED_ACCELMAX_CMS);
         break;}
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.WITHIN_COAST_IN_DIST) {status = TRAN(&ModeLoiterAssisted::CoastIn);}
@@ -821,7 +826,7 @@ void ModeLoiterAssisted::runFlightCode() {
     }
 }
 
-void ModeLoiterAssisted::runExitCode() {
+void ModeLoiterAssisted::runStateExitCode() {
     Status status = (this->*_lass_state)(Event::EXIT_SIG);
     // We can do something with status if we need to now
     if (status == Status::TRAN_STATUS) {
@@ -1024,7 +1029,8 @@ void ModeLoiterAssisted::abortExit() {
 // send exit lass message
 void ModeLoiterAssisted::exit()
 {
-    runExitCode();
+    pos_control->set_max_speed_accel_xy(POSCONTROL_SPEED, POSCONTROL_ACCEL_XY);
+    runStateExitCode();
     gcs().send_named_float("lass", 9);
 }
 
