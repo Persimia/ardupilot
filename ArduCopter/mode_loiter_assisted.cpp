@@ -420,6 +420,9 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         _locked_vel_NE_cm_s = Vector2f(cosf(heading_rad),sinf(heading_rad))*_dock_speed_cm_s;
         _recovery_position_NED_m = _cur_pos_NED_m;
         _locked_dock_pos_NE_m = _filt_dock_xyz_NEU_m.xy();
+
+        pos_control->set_max_speed_accel_xy(_dock_speed_cm_s, wp_nav->get_wp_acceleration());
+        pos_control->set_correction_speed_accel_xy(_dock_speed_cm_s, wp_nav->get_wp_acceleration());
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         _locked_dock_pos_NE_m = Vector2f(INFINITY, INFINITY); // get rid of locked dock target because we don't care if we leave leadup
