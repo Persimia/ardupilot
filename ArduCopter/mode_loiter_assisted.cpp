@@ -12,7 +12,7 @@
 #define POS_HZ_DEFAULT                       2.0f // lower means less trust of new measurements
 #define WV_WIND_DEFAULT                      5
 #define WV_THRESH_DEFAULT                    0.1f 
-#define DOCK_SPEED_CM_S_DEFAULT              20.0f
+#define DOCK_SPEED_CM_S_DEFAULT              40.0f
 #define UNDOCK_SPEED_CM_S_DEFAULT            50.0f
 #define CID_CM_DEFAULT                       80.0f // coast in distance
 #define COP_DEG_DEFAULT                      5.0f
