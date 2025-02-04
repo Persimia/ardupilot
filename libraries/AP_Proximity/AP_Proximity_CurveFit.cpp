@@ -429,7 +429,7 @@ void AP_Proximity_CurveFit::log_fit(Vector2f center, Vector2f normal_vec, float 
                         );
 }
 
-void AP_Proximity_CurveFit::log_target(const float heading, const float distance_m)
+void AP_Proximity_CurveFit::log_target(const float heading_rad, const float distance_m)
 {
     if(_fit_type == NONE){
     // return id there is no valid fit
@@ -439,7 +439,7 @@ void AP_Proximity_CurveFit::log_target(const float heading, const float distance
     struct log_Proximity_Cfit_Target pkt = {
         LOG_PACKET_HEADER_INIT(LOG_PROXIMITY_CFIT_TGT_MSG),
         time_us        :  AP_HAL::micros64(),
-        target_heading :  heading*RAD_TO_DEG,
+        target_heading :  heading_rad*RAD_TO_DEG,
         target_distance:  distance_m
     };
     AP::logger().WriteBlock(&pkt, sizeof(pkt));

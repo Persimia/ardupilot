@@ -264,6 +264,9 @@ void ModeLoiterAssisted::run()
     checkDockComms();
     updateFilterParams(); // Update filters (simply check for param changes)
     findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
+    float heading_to_dock_rad = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD*DEG_TO_RAD;
+    float heading_to_dock_dist_m = (_cur_pos_NED_m.xy()-_filt_dock_xyz_NEU_m.xy()).length();
+    g2.proximity.curvefit->log_target(heading_to_dock_rad, heading_to_dock_dist_m);
     evaluateFlags(); // evaluate some flags
     sendFlagFeedback(); // send pilot feedback on flags
     
