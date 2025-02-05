@@ -372,9 +372,10 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
         if (target_to_dock_dist_cm < _min_obs_dist_cm.get()) {
             // if integrated position is too close, adjust to nearest pos that fits min distance condition
-            Vector2f min_dist_correction_vec_cm = target_to_dock_vec_cm.normalized()*abs(target_to_dock_dist_cm-_min_obs_dist_cm.get());
+            Vector2f correction_vec = target_to_dock_vec_cm.normalized();
+            Vector2f min_dist_correction_vec_cm = correction_vec*abs(target_to_dock_dist_cm-_min_obs_dist_cm.get());
             target_xy_NE_cm -= min_dist_correction_vec_cm;
-            target_xy_NE_vel_cm_s -= min_dist_correction_vec_cm/G_Dt;
+            target_xy_NE_vel_cm_s -= correction_vec*target_xy_NE_vel_cm_s.dot(correction_vec);
         }
         // pos_control->set_pos_target_xy_cm(target_xy_NE_cm.x, target_xy_NE_cm.y);
         Vector2p pos_xy = target_xy_NE_cm.topostype();
