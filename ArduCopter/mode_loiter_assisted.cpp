@@ -330,7 +330,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = true;
         Vector3f zero_vel;
-        pos_control->set_vel_desired_cms(zero_vel);
+        // pos_control->set_vel_desired_cms(zero_vel);
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         break;}
@@ -367,7 +367,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         Vector2f target_xy_NE_vel_cm_s = target_xy_body_vel_cm_s;
         target_xy_NE_vel_cm_s.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
         // integrate position with velocity command
-        Vector2f target_xy_NE_cm = pos_control->get_pos_target_cm().tofloat().xy() + target_xy_NE_vel_cm_s*G_Dt;
+        Vector2f target_xy_NE_cm = _cur_pos_NED_m.xy()*M_TO_CM + target_xy_NE_vel_cm_s;
         Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NE_cm;
         float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
         if (target_to_dock_dist_cm < _min_obs_dist_cm.get()) {
@@ -376,12 +376,12 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
             target_xy_NE_cm -= min_dist_correction_vec_cm;
             // target_xy_NE_vel_cm_s -= min_dist_correction_vec_cm/G_Dt;
         }
-        pos_control->set_pos_target_xy_cm(target_xy_NE_cm.x, target_xy_NE_cm.y);
-        // Vector2p pos_xy = target_xy_NE_cm.topostype();
+        // pos_control->set_pos_target_xy_cm(target_xy_NE_cm.x, target_xy_NE_cm.y);
+        Vector2p pos_xy = target_xy_NE_cm.topostype();
         // Vector2f vel_xy = target_xy_NE_vel_cm_s;
-        // // Vector2f vel_xy;
-        // Vector2f acc_xy;
-        // pos_control->input_pos_vel_accel_xy(pos_xy, vel_xy, acc_xy);
+        Vector2f vel_xy;
+        Vector2f acc_xy;
+        pos_control->input_pos_vel_accel_xy(pos_xy, vel_xy, acc_xy);
 
         // Yaw controller
         AC_AttitudeControl::HeadingCommand heading_cmd;
