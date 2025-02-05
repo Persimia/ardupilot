@@ -93,14 +93,12 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
 AP_Proximity_CurveFit::AP_Proximity_CurveFit()
 {
     AP_Param::setup_object_defaults(this, var_info);
-    // _center_filter.set_cutoff_frequency(_lidar_sweep_rate_hz, _center_filter_cutoff_hz);
 }
 
 
 bool AP_Proximity_CurveFit::get_target(Vector2f &normal_vec, Vector2f &center)
 {
     Vector2f curr_pos;
-
     if(!AP::ahrs().get_relative_position_NE_origin(curr_pos)){return false;} // No Position Estimate
     if(!compute_fit(curr_pos, _tangent_vec, _normal_vec, _center, _fit_quality, _fit_type, _fit_num)){return false;}// Unable to solve heading, distance
     normal_vec = _normal_vec;
@@ -126,8 +124,6 @@ bool AP_Proximity_CurveFit::compute_fit(Vector2f curr_pos,
         if(solve_line(coefficients, curr_pos, tangent_vec, normal_vec, center, fit_quality))
         {//Try to fit a line
             fit_type = AP_Proximity_CurveFit::CenterType::LINE;
-            // Vector2f old_center = center;
-            center = _center_filter.apply(center);
             log_fit(center, normal_vec, fit_quality, fit_num);
             return true;
         }
@@ -136,8 +132,6 @@ bool AP_Proximity_CurveFit::compute_fit(Vector2f curr_pos,
     if (solve_point(curr_pos, fit_num, tangent_vec, normal_vec, center, fit_quality))
     {
         fit_type = AP_Proximity_CurveFit::CenterType::POINT;
-        // Vector2f old_center = center;
-        center = _center_filter.apply(center);
         log_fit(center, normal_vec, fit_quality, fit_num);
         return true;
     }
@@ -235,7 +229,6 @@ bool AP_Proximity_CurveFit::solve_line(AP_Proximity_CurveFit::Coefficients c, Ve
 void AP_Proximity_CurveFit::add_point(float angle_deg, float distance_m)
 {
     angle_deg = wrap_180(angle_deg);
-    // uint8_t dir = (_last_angle < angle_deg) ? 1 : (_last_angle > angle_deg ? -1 : 0);
 
     // check if angle is within range
     if(angle_deg > _angle_min_deg.get() && angle_deg < _angle_max_deg.get()){
@@ -263,9 +256,14 @@ void AP_Proximity_CurveFit::add_point(float angle_deg, float distance_m)
                         point.y = distance_m * sinf(angle_deg*DEG_TO_RAD+yaw_rad) + current_position_NE_m.y + gimbal_offset.y;
                     }
                     
-
                     _points_NE_origin[_write_end] = point;
+                    if (abs(angle_deg) < _nearest_valid_point_angle_deg) {
+                        _nearest_valid_point_index = _write_end; 
+                        _nearest_valid_point_angle_deg = angle_deg;
+                    }
+
                     _write_end += 1;
+
                 }
             } else {
                 gcs().send_text(MAV_SEVERITY_CRITICAL, "CFIT BUFFER FULL!");
@@ -276,25 +274,9 @@ void AP_Proximity_CurveFit::add_point(float angle_deg, float distance_m)
     //this indicates that a new scan is availible and moves the _write_start in preparation for the next scan
     else if(_last_angle > _angle_min_deg.get() && _last_angle < _angle_max_deg.get()){
         reset();
-        // _reset_flag = true;
     }
-    // if (dir != _last_dir) { // if direction changes, we want to reset if we haven't already
-    //     if (!_reset_flag) {
-    //         if (!_first_time_range_error) { // ignore the first one because we can't know first dir
-    //             gcs().send_text(MAV_SEVERITY_CRITICAL, "CFIT ANG RANGE TOO BIG!"); 
-    //             // maybe we don't need to alert anyone since we're doing the reset here anyway?
-    //             reset();
-    //         }
-    //         else {
-    //             _first_time_range_error = false;
-    //         }
-    //     } else {
-    //         _reset_flag = false;
-    //     }
-    // }
 
     _last_angle = angle_deg;
-    // _last_dir = dir;
     return;
 }
 
@@ -302,78 +284,20 @@ void AP_Proximity_CurveFit::truncate_data(Vector2f curr_pos)
 {   
     int fit_num = _read_end - _read_start;
     if (fit_num < 1){ return;} //No data
-    
-
-    int closest_index;
-    float closest_distance;
-    find_closest_index(curr_pos, closest_index, closest_distance);
-    // if (fit_num>3) {
-    //     int nearest_neighbor1 = closest_index+1;
-    //     int nearest_neighbor2 = closest_index-1;
-    //     if (nearest_neighbor1 > _read_end) {
-    //         nearest_neighbor1 = closest_index-2;
-    //     }
-    //     if (nearest_neighbor2 < _read_start) {
-    //         nearest_neighbor2 = closest_index+2;
-    //     }
-    //     float dist1 = (_points_NE_origin[closest_index]-_points_NE_origin[nearest_neighbor1]).length();
-    //     float dist2 = (_points_NE_origin[closest_index]-_points_NE_origin[nearest_neighbor2]).length();
-    //     float min_dist = std::min(dist1,dist2);
-
-        // // Check for distance metric and truncate data 
-        // for(int i = closest_index; i < _read_end-1; i++){
-        //     int num_away = i+1-closest_index;
-        //     float expected_dist1 = sinf(_lidar_scan_pitch_deg.get()*num_away*DEG_TO_RAD)*closest_distance;
-        //     float expected_dist2 = sinf((_lidar_scan_pitch_deg.get()*num_away-1)*DEG_TO_RAD)*closest_distance;
-        //     float truncation_distance_cutoff = abs(expected_dist1-expected_dist2); // This is the expected distance away if we were perpendicular to a flat wall
-            
-        //     if((_points_NE_origin[i+1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_mult.get()){
-        //         _read_end = i+1;
-        //         break;
-        //     }
-        // }
-        // for(int i = closest_index; i > _read_start; i--){
-        //     int num_away = closest_index-i+1;
-        //     float expected_dist1 = sinf(_lidar_scan_pitch_deg.get()*num_away*DEG_TO_RAD)*closest_distance;
-        //     float expected_dist2 = sinf((_lidar_scan_pitch_deg.get()*num_away-1)*DEG_TO_RAD)*closest_distance;
-        //     float truncation_distance_cutoff = abs(expected_dist1-expected_dist2); // This is the expected distance away if we were perpendicular to a flat wall
-            
-        //     if((_points_NE_origin[i-1]-_points_NE_origin[i]).length() > truncation_distance_cutoff*_truncation_distance_mult.get()){
-        //         _read_start = i;
-        //         break;
-        //     }
-        // }
-    // }   
 
     // Check for distance metric and truncate data 
-    for(int i = closest_index; i < _read_end-1; i++){
+    for(int i = _nearest_valid_point_index; i < _read_end-1; i++){
         if((_points_NE_origin[i+1]-_points_NE_origin[i]).length() > _truncation_distance_m.get()){
             _read_end = i+1;
             break;
         }
     }
-    for(int i = closest_index; i > _read_start; i--){
+    for(int i = _nearest_valid_point_index; i > _read_start; i--){
         if((_points_NE_origin[i-1]-_points_NE_origin[i]).length() > _truncation_distance_m.get()){
             _read_start = i;
             break;
         }
     }
-
-    // Vector2f normal_dir = (_points_NE_origin[closest_index]).normalized();
-    // // Check for discontinuity and truncate data 
-    // for(int i = closest_index; i < _read_end-1; i++){
-    //     if(abs(normal_dir.dot(_points_NE_origin[i+1] - _points_NE_origin[i])) > _discontinuity_threshold.get()){
-    //         _read_end = i+1;
-    //         break;
-    //     }
-    // }
-    
-    // for(int i = closest_index; i > _read_start; i--){
-    //     if(abs(normal_dir.dot(_points_NE_origin[i-1] - _points_NE_origin[i])) > _discontinuity_threshold.get()){
-    //         _read_start = i;
-    //         break;
-    //     }
-    // }
     return;
 }
 
@@ -392,24 +316,15 @@ void AP_Proximity_CurveFit::compute_coefficients(AP_Proximity_CurveFit::Coeffici
     }
 }
 
-void AP_Proximity_CurveFit::find_closest_index(const Vector2f curr_pos, int &closest_index, float &closest_distance){
-    closest_distance = (_points_NE_origin[_read_start] - curr_pos).length_squared();
-    closest_index = _read_start;
-    for(int i=_read_start+1; i<_read_end; i++){
-        float distance_m = (_points_NE_origin[i] - curr_pos).length_squared();
-        if(distance_m < closest_distance){
-            closest_index = i;
-            closest_distance = distance_m;
-        }
-    }
-}
-
 void AP_Proximity_CurveFit::reset()
 {
     _read_end = _write_end;
     _read_start = _write_start;
     _write_start = (_write_start == CURVEFIT_DATA_LEN ? 0 : CURVEFIT_DATA_LEN);
     _write_end = _write_start;
+
+    _nearest_valid_point_index = 0; 
+    _nearest_valid_point_angle_deg = INFINITY;
 
     _fit_type = AP_Proximity_CurveFit::CenterType::NONE;
 }

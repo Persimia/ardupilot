@@ -363,19 +363,22 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         // Flight Code
         // xy controller... TODO Change to velocity control!
         float filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD;
-        // float filt_heading_cmd_deg = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x)*RAD_TO_DEG;
         Vector2f target_xy_body_vel_cm_s = get_pilot_desired_velocity_xy(_vel_max_cm_s.get());
         Vector2f target_xy_NEU_vel_cm_s = target_xy_body_vel_cm_s;
         target_xy_NEU_vel_cm_s.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
-        Vector2f target_xy_NEU_cm = pos_control->get_pos_target_cm().tofloat().xy() + target_xy_NEU_vel_cm_s*G_Dt;
-        Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NEU_cm;
+        Vector2f target_xy_NE_cm = pos_control->get_pos_target_cm().tofloat().xy() + target_xy_NEU_vel_cm_s*G_Dt;
+        Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NE_cm;
         float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
         if (target_to_dock_dist_cm < _min_obs_dist_cm.get()) {
             // if too close, adjust to nearest pos that fits min distance condition
             Vector2f min_dist_correction_vec_cm = target_to_dock_vec_cm.normalized()*abs(target_to_dock_dist_cm-_min_obs_dist_cm.get());
-            target_xy_NEU_cm -= min_dist_correction_vec_cm;
+            target_xy_NE_cm -= min_dist_correction_vec_cm;
         }
-        pos_control->set_pos_target_xy_cm(target_xy_NEU_cm.x, target_xy_NEU_cm.y);
+        // pos_control->set_pos_target_xy_cm(target_xy_NE_cm.x, target_xy_NE_cm.y);
+        Vector2p pos_xy = target_xy_NE_cm.topostype();
+        Vector2f vel_xy;
+        Vector2f acc_xy;
+        pos_control->input_pos_vel_accel_xy(pos_xy, vel_xy, acc_xy);
 
         // Yaw controller
         AC_AttitudeControl::HeadingCommand heading_cmd;
@@ -395,8 +398,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
         lasmData data;
         data.hdg = filt_heading_cmd_deg;
-        data.tpX = target_xy_NEU_cm.x/M_TO_CM;
-        data.tpY = target_xy_NEU_cm.y/M_TO_CM;
+        data.tpX = target_xy_NE_cm.x/M_TO_CM;
+        data.tpY = target_xy_NE_cm.y/M_TO_CM;
         data.tvZ = target_climb_rate_cm_s/M_TO_CM;
         logLasm(data);
         break;}
@@ -460,6 +463,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
 
         lasmData data;
         data.hdg = _locked_heading_deg;
+        data.tpX = _locked_dock_pos_NE_m.x,
+        data.tpY = _locked_dock_pos_NE_m.y,
         data.tvX = _locked_vel_NE_cm_s.x/M_TO_CM;
         data.tvY = _locked_vel_NE_cm_s.y/M_TO_CM;
         data.tvZ = 0.0f;
@@ -763,11 +768,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
         // else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
-        // Flight Code
-        // pos_control->set_pos_target_xy_cm(_recovery_position_NED_m.x*M_TO_CM, _recovery_position_NED_m.y*M_TO_CM);
-        // pos_control->set_pos_target_z_cm(-_recovery_position_NED_m.z*M_TO_CM); // negative to convert NED to NEU
-
-        Vector2p pos_xy = (_recovery_position_NED_m.xy()*M_TO_CM).todouble();
+        Vector2p pos_xy = (_recovery_position_NED_m.xy()*M_TO_CM).topostype();
         Vector2f vel_xy;
         Vector2f acc_xy;
         pos_control->input_pos_vel_accel_xy(pos_xy, vel_xy, acc_xy);
@@ -776,21 +777,9 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
         float vel_z = 0.0f;
         pos_control->input_pos_vel_accel_z(pos_z, vel_z, 0.0f);
 
-        // run position controllers
         pos_control->update_xy_controller();
         pos_control->update_z_controller();
-
-        // call attitude controller with auto yaw
         attitude_control->input_thrust_vector_rate_heading(pos_control->get_thrust_vector(), 0.0f, true);
-
-        // if (millis()-_last_send_windup > _statustext_period_ms) {
-        //         float dist_to_recovery_pos_cm = (_recovery_position_NED_m-_cur_pos_NED_m).length()*M_TO_CM;
-        //         GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "pos: %.2f, %.2f, %.2f targ: %.2f, %.2f, %.2f, diff: %.4f", 
-        //         _cur_pos_NED_m.x, _cur_pos_NED_m.y, _cur_pos_NED_m.z,
-        //         _recovery_position_NED_m.x, _recovery_position_NED_m.y, _recovery_position_NED_m.z,
-        //         dist_to_recovery_pos_cm); // TODO remove or rate limit
-        //         _last_send_windup = millis();
-        //     }
         
         lasmData data;
         data.tpX = _recovery_position_NED_m.x,
