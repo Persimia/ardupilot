@@ -279,7 +279,6 @@ void ModeLoiterAssisted::run()
     updateFilterParams(); // Update filters (simply check for param changes)
     findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
     evaluateFlags(); // evaluate some flags
-    sendFlagFeedback(); // send pilot feedback on flags
     
     evaluate_transitions(); // evaluate transitions
     runFlightCode(); // run flight code for current state
@@ -678,7 +677,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
             // --- End Slew Rate Limiter ---
 
             _wind_up_throttle = constrain_float(_wind_up_throttle, 0.0f, 1.0f);
-            attitude_control->set_throttle_out(_wind_up_throttle, false, g.throttle_filt);
+            attitude_control->set_throttle_out(_wind_up_throttle, true, g.throttle_filt);
             attitude_control->relax_attitude_controllers();
         }
 

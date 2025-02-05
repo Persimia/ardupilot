@@ -27,7 +27,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Values: -90, -5
     // @Units: deg  
     // @User: Advanced
-    AP_GROUPINFO("_ANGMIN", 2, AP_Proximity_CurveFit, _angle_min_deg, -50.0f),
+    AP_GROUPINFO("_ANGMIN", 2, AP_Proximity_CurveFit, _angle_min_deg, -65.0f),
     
     // @Param{Copter}: _ANGMAX
     // @DisplayName: Proximity Curvefit Maximum Angle
@@ -35,7 +35,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Values: 5, 90
     // @Units: deg
     // @User: Advanced
-    AP_GROUPINFO("_ANGMAX", 3, AP_Proximity_CurveFit, _angle_max_deg, 50.0f),
+    AP_GROUPINFO("_ANGMAX", 3, AP_Proximity_CurveFit, _angle_max_deg, 65.0f),
 
     // @Param{Copter}: _RNGMIN
     // @DisplayName: Proximity Curvefit Minimum Range
@@ -64,21 +64,21 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Description: Proximity Curvefit Gimbal forward distance m
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_GIM_FW", 7, AP_Proximity_CurveFit, _gimbal_forward_m, 0.0f),
+    AP_GROUPINFO("_GIM_FW", 7, AP_Proximity_CurveFit, _gimbal_forward_m, .112f),
 
     // @Param{Copter}: _GIM_RT
     // @DisplayName: Proximity Curvefit Gimbal right distance m
     // @Description: Proximity Curvefit Gimbal right distance m
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_GIM_RT", 8, AP_Proximity_CurveFit, _gimbal_right_m, 0.0f),
+    AP_GROUPINFO("_GIM_RT", 8, AP_Proximity_CurveFit, _gimbal_right_m, -0.00254f),
 
     // @Param{Copter}: _GIM_UP
     // @DisplayName: Proximity Curvefit Gimbal up distance m
     // @Description: Proximity Curvefit Gimbal up distance m
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_GIM_UP", 9, AP_Proximity_CurveFit, _gimbal_up_m, 0.0f),
+    AP_GROUPINFO("_GIM_UP", 9, AP_Proximity_CurveFit, _gimbal_up_m, .204f),
 
     AP_GROUPEND
 };
