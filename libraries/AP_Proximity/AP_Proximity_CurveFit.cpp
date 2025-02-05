@@ -259,7 +259,7 @@ void AP_Proximity_CurveFit::add_point(float angle_deg, float distance_m)
                     _points_NE_origin[_write_end] = point;
                     if (abs(angle_deg) < _nearest_valid_point_angle_deg) {
                         _write_nearest_valid_point_index = _write_end; 
-                        _nearest_valid_point_angle_deg = angle_deg;
+                        _nearest_valid_point_angle_deg = abs(angle_deg);
                     }
 
                     _write_end += 1;
