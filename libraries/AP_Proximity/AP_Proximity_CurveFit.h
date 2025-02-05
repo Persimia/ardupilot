@@ -96,7 +96,8 @@ private:
     int _write_end = CURVEFIT_DATA_LEN;
 
     float _last_angle;
-    int _nearest_valid_point_index;
+    int _write_nearest_valid_point_index;
+    int _read_nearest_valid_point_index;
     float _nearest_valid_point_angle_deg = INFINITY;
 
     uint8_t _min_req_for_line{3};
