@@ -364,15 +364,17 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         // xy controller... TODO Change to velocity control!
         float filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD;
         Vector2f target_xy_body_vel_cm_s = get_pilot_desired_velocity_xy(_vel_max_cm_s.get());
-        Vector2f target_xy_NEU_vel_cm_s = target_xy_body_vel_cm_s;
-        target_xy_NEU_vel_cm_s.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
-        Vector2f target_xy_NE_cm = pos_control->get_pos_target_cm().tofloat().xy() + target_xy_NEU_vel_cm_s*G_Dt;
+        Vector2f target_xy_NE_vel_cm_s = target_xy_body_vel_cm_s;
+        target_xy_NE_vel_cm_s.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
+        // integrate position with velocity command
+        Vector2f target_xy_NE_cm = pos_control->get_pos_target_cm().tofloat().xy() + target_xy_NE_vel_cm_s*G_Dt;
         Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NE_cm;
         float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
         if (target_to_dock_dist_cm < _min_obs_dist_cm.get()) {
-            // if too close, adjust to nearest pos that fits min distance condition
+            // if integrated position is too close, adjust to nearest pos that fits min distance condition
             Vector2f min_dist_correction_vec_cm = target_to_dock_vec_cm.normalized()*abs(target_to_dock_dist_cm-_min_obs_dist_cm.get());
             target_xy_NE_cm -= min_dist_correction_vec_cm;
+            target_xy_NE_vel_cm_s -= min_dist_correction_vec_cm/G_Dt;
         }
         // pos_control->set_pos_target_xy_cm(target_xy_NE_cm.x, target_xy_NE_cm.y);
         Vector2p pos_xy = target_xy_NE_cm.topostype();
