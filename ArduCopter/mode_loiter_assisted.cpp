@@ -378,7 +378,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         }
         // pos_control->set_pos_target_xy_cm(target_xy_NE_cm.x, target_xy_NE_cm.y);
         Vector2p pos_xy = target_xy_NE_cm.topostype();
-        Vector2f vel_xy = target_xy_body_vel_cm_s;
+        Vector2f vel_xy = target_xy_NE_vel_cm_s;
         // Vector2f vel_xy;
         Vector2f acc_xy;
         pos_control->input_pos_vel_accel_xy(pos_xy, vel_xy, acc_xy);
