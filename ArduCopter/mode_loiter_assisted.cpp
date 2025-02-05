@@ -366,19 +366,15 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         Vector2f target_xy_body_vel_cm_s = get_pilot_desired_velocity_xy(_vel_max_cm_s.get());
         Vector2f target_xy_NEU_vel_cm_s = target_xy_body_vel_cm_s;
         target_xy_NEU_vel_cm_s.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
-        Vector2f target_xy_NE_cm = pos_control->get_pos_target_cm().tofloat().xy() + target_xy_NEU_vel_cm_s*G_Dt;
-        Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NE_cm;
+        Vector2f target_xy_NEU_cm = pos_control->get_pos_target_cm().tofloat().xy() + target_xy_NEU_vel_cm_s*G_Dt;
+        Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NEU_cm;
         float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
         if (target_to_dock_dist_cm < _min_obs_dist_cm.get()) {
             // if too close, adjust to nearest pos that fits min distance condition
             Vector2f min_dist_correction_vec_cm = target_to_dock_vec_cm.normalized()*abs(target_to_dock_dist_cm-_min_obs_dist_cm.get());
-            target_xy_NE_cm -= min_dist_correction_vec_cm;
+            target_xy_NEU_cm -= min_dist_correction_vec_cm;
         }
-        // pos_control->set_pos_target_xy_cm(target_xy_NE_cm.x, target_xy_NE_cm.y);
-        Vector2p pos_xy = target_xy_NE_cm.topostype();
-        Vector2f vel_xy;
-        Vector2f acc_xy;
-        pos_control->input_pos_vel_accel_xy(pos_xy, vel_xy, acc_xy);
+        pos_control->set_pos_target_xy_cm(target_xy_NEU_cm.x, target_xy_NEU_cm.y);
 
         // Yaw controller
         AC_AttitudeControl::HeadingCommand heading_cmd;
@@ -398,8 +394,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), heading_cmd);
         lasmData data;
         data.hdg = filt_heading_cmd_deg;
-        data.tpX = target_xy_NE_cm.x/M_TO_CM;
-        data.tpY = target_xy_NE_cm.y/M_TO_CM;
+        data.tpX = target_xy_NEU_cm.x/M_TO_CM;
+        data.tpY = target_xy_NEU_cm.y/M_TO_CM;
         data.tvZ = target_climb_rate_cm_s/M_TO_CM;
         logLasm(data);
         break;}
