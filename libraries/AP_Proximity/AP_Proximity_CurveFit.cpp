@@ -258,7 +258,7 @@ void AP_Proximity_CurveFit::add_point(float angle_deg, float distance_m)
                     
                     _points_NE_origin[_write_end] = point;
                     if (abs(angle_deg) < _nearest_valid_point_angle_deg) {
-                        _nearest_valid_point_index = _write_end; 
+                        _write_nearest_valid_point_index = _write_end; 
                         _nearest_valid_point_angle_deg = angle_deg;
                     }
 
@@ -286,13 +286,13 @@ void AP_Proximity_CurveFit::truncate_data(Vector2f curr_pos)
     if (fit_num < 1){ return;} //No data
 
     // Check for distance metric and truncate data 
-    for(int i = _nearest_valid_point_index; i < _read_end-1; i++){
+    for(int i = _read_nearest_valid_point_index; i < _read_end-1; i++){
         if((_points_NE_origin[i+1]-_points_NE_origin[i]).length() > _truncation_distance_m.get()){
             _read_end = i+1;
             break;
         }
     }
-    for(int i = _nearest_valid_point_index; i > _read_start; i--){
+    for(int i = _read_nearest_valid_point_index; i > _read_start; i--){
         if((_points_NE_origin[i-1]-_points_NE_origin[i]).length() > _truncation_distance_m.get()){
             _read_start = i;
             break;
@@ -323,7 +323,8 @@ void AP_Proximity_CurveFit::reset()
     _write_start = (_write_start == CURVEFIT_DATA_LEN ? 0 : CURVEFIT_DATA_LEN);
     _write_end = _write_start;
 
-    _nearest_valid_point_index = 0; 
+    _read_nearest_valid_point_index = _write_nearest_valid_point_index; 
+    _write_nearest_valid_point_index = 0; 
     _nearest_valid_point_angle_deg = INFINITY;
 
     _fit_type = AP_Proximity_CurveFit::CenterType::NONE;
