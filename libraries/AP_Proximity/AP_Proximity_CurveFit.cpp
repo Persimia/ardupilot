@@ -59,33 +59,26 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("_TRNC_M", 6, AP_Proximity_CurveFit, _truncation_distance_m, DEFAULT_TRUNCATION_DISTANCE_M),
 
-    // @Param{Copter}: _SCN_PIT
-    // @DisplayName: Proximity Curvefit Scan pitch
-    // @Description: Proximity Curvefit Scan pitch (expected distance between measurements in degrees)
-    // @Units: m
-    // @User: Advanced
-    AP_GROUPINFO("_SCN_PIT", 7, AP_Proximity_CurveFit, _lidar_scan_pitch_deg, DEFAULT_LIDAR_SCAN_PITCH_DEG),
-
     // @Param{Copter}: _GIM_FW
     // @DisplayName: Proximity Curvefit Gimbal forward distance m
     // @Description: Proximity Curvefit Gimbal forward distance m
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_GIM_FW", 8, AP_Proximity_CurveFit, _gimbal_forward_m, 0.0f),
+    AP_GROUPINFO("_GIM_FW", 7, AP_Proximity_CurveFit, _gimbal_forward_m, 0.0f),
 
     // @Param{Copter}: _GIM_RT
     // @DisplayName: Proximity Curvefit Gimbal right distance m
     // @Description: Proximity Curvefit Gimbal right distance m
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_GIM_RT", 9, AP_Proximity_CurveFit, _gimbal_right_m, 0.0f),
+    AP_GROUPINFO("_GIM_RT", 8, AP_Proximity_CurveFit, _gimbal_right_m, 0.0f),
 
     // @Param{Copter}: _GIM_UP
     // @DisplayName: Proximity Curvefit Gimbal up distance m
     // @Description: Proximity Curvefit Gimbal up distance m
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_GIM_UP", 10, AP_Proximity_CurveFit, _gimbal_up_m, 0.0f),
+    AP_GROUPINFO("_GIM_UP", 9, AP_Proximity_CurveFit, _gimbal_up_m, 0.0f),
 
     AP_GROUPEND
 };

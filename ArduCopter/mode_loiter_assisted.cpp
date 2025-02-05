@@ -7,41 +7,36 @@
 #if MODE_LOITER_ASSISTED_ENABLED == ENABLED
 
 // Parameter defaults
-#define VEL_MAX_DEFAULT                      100.0f
-#define MIN_OBS_DIST_CM_DEFAULT              180.0f // closest you can get to obstacle in lass
-#define POS_HZ_DEFAULT                       2.0f // lower means less trust of new measurements
-#define WV_WIND_DEFAULT                      5
-#define WV_THRESH_DEFAULT                    0.1f 
-#define DOCK_SPEED_CM_S_DEFAULT              40.0f
-#define UNDOCK_SPEED_CM_S_DEFAULT            50.0f
-#define CID_CM_DEFAULT                       80.0f // coast in distance
-#define COP_DEG_DEFAULT                      5.0f
-#define DEFAULT_THRO_PITCH_P_GAIN            0.01f  // initial P gain
-#define DEFAULT_THRO_PITCH_I_GAIN            0.0f // initial I gain
-#define DEFAULT_THRO_PITCH_D_GAIN            0.002f // initial D gain
-#define DEFAULT_THRO_PITCH_FF_GAIN           0.0f  // initial feed-forward (FF)
-#define DEFAULT_THRO_PITCH_IMAX              0.5f // integrator max  is half throttle
-#define DEFAULT_THRO_PITCH_ERR_HZ            200.0f // error filter frequency in Hz
-#define DEFAULT_THRO_PITCH_D_HZ              200.0f  // derivative filter frequency in Hz
-#define DEFAULT_STATIONARY_VEL_M_S           0.05f    // vehicle velocity must be under m/s
-#define DEFAULT_WINDDOWN_DECAY_TIME_S        6.0f // time to winddown throttle in seconds 
-#define DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG     -5.0f
-#define DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG     -2.0f
-#define DEFAULT_MAX_TP_THROTTLE_RATE        1.0f // ten percent throttle per second default (~3-4 sec for hover throttle)
-#define DEFAULT_DELTA_WIND_UP_PITCH_DEG      2.0f
+#define DEFAULT_VEL_MAX                             100.0f
+#define DEFAULT_MIN_OBS_DIST_CM                     180.0f // closest you can get to obstacle in lass
+#define DEFAULT_POS_HZ                              2.0f // lower means less trust of new measurements
+#define DEFAULT_WV_WIND                             5
+#define DEFAULT_WV_THRESH                           0.1f 
+#define DEFAULT_DOCK_SPEED_CM_S                     40.0f
+#define DEFAULT_CID_CM                              80.0f // coast in distance
+#define DEFAULT_COP_DEG                             5.0f
+#define DEFAULT_THRO_PITCH_P_GAIN                   0.01f  // initial P gain
+#define DEFAULT_THRO_PITCH_I_GAIN                   0.0f // initial I gain
+#define DEFAULT_THRO_PITCH_D_GAIN                   0.002f // initial D gain
+#define DEFAULT_THRO_PITCH_FF_GAIN                  0.0f  // initial feed-forward (FF)
+#define DEFAULT_THRO_PITCH_IMAX                     0.5f // integrator max  is half throttle
+#define DEFAULT_THRO_PITCH_ERR_HZ                   200.0f // error filter frequency in Hz
+#define DEFAULT_THRO_PITCH_D_HZ                     200.0f  // derivative filter frequency in Hz
+#define DEFAULT_STATIONARY_VEL_M_S                  0.05f    // vehicle velocity must be under m/s
+#define DEFAULT_WINDDOWN_DECAY_TIME_S               6.0f // time to winddown throttle in seconds 
+#define DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG      -5.0f
+#define DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG      -2.0f
+#define DEFAULT_MAX_TP_THROTTLE_RATE                1.0f // ten percent throttle per second default (~3-4 sec for hover throttle)
+#define DEFAULT_DELTA_WIND_UP_PITCH_DEG             2.0f
+#define DEFAULT_HEADING_NORMAL_TOL_DEG              10.0f    // degrees between heading and dock surface normal.
+#define DEFAULT_RECOVERY_TOL_CM                     10.0f
+#define DEFAULT_WIND_UP_THROTTLE_HOVER_MIN_RATIO    0.8f // we need to be at 80% of the hover throttle threshold to be considered wound up
+#define DEFAULT_COAST_OUT_DIST_CM                   40.0f
 
 // Hard coded parameters
-#define WIND_UP_PITCH_TOL_DEG              0.5f   
-#define RECOVERY_DIST_THRESH_CM            50.0f
-#define COAST_OUT_DIST_CM                  40.0f
-#define HEADING_NORMAL_TOL_DEG             10.0f    // degrees between heading and dock surface normal. Change this?? 
-#define MAX_THROTTLE_CORRECTION            0.1f    // thr_ratio_units per second 0.0 - 1.0
-#define THROTTLE_PITCH_CONTROL_GAIN        0.001f   // thr_ratio_units/deg/step. In wind up, controls throttle to pitch angle controller
-#define ATT_CONTROL_RATE_LIM_DEG_S         2.0f  
 #define BACKUP_RECOVERY_DIST_BACK_M        1.5f  // distance back from current pos the recovery target will be set to
 #define BACKUP_RECOVERY_DIST_UP_M          0.25f  // distance up from current pos the recovery target will be set to
 #define DOCK_COMMS_PERIOD_MS               1500  // when the dock expects an att_st message heartbeat
-#define WIND_UP_THROTTLE_HOVER_THRESHOLD   0.8f // we need to be at 80% of the hover throttle threshold to be considered wound up
 #define LOITER_ASSISTED_ACCELMAX_CMS       200.0f   
 #define LEADUP_ACCELMAX_CMSS               125.0f
 
@@ -56,7 +51,7 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Description: Max velocity commandable by sticks cm/s
     // @Range: 0 2
     // @User: Advanced
-    AP_GROUPINFO("VEL_MAX", 1, ModeLoiterAssisted, _vel_max_cm_s, VEL_MAX_DEFAULT),
+    AP_GROUPINFO("VEL_MAX", 1, ModeLoiterAssisted, _vel_max_cm_s, DEFAULT_VEL_MAX),
 
     // @Param: MIN_DIST
     // @DisplayName: Minimum dist to obstacle cm
@@ -64,28 +59,28 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Units: cm
     // @Range: 0 5000
     // @User: Advanced
-    AP_GROUPINFO("MIN_DIST", 2, ModeLoiterAssisted, _min_obs_dist_cm, MIN_OBS_DIST_CM_DEFAULT),
+    AP_GROUPINFO("MIN_DIST", 2, ModeLoiterAssisted, _min_obs_dist_cm, DEFAULT_MIN_OBS_DIST_CM),
 
     // @Param: POS_HZ
     // @DisplayName: Pos LPF alpha
     // @Description: This is the alpha for lpf on dist [x*a + y*(a-1)]
     // @Range: 0 100
     // @User: Advanced
-    AP_GROUPINFO("POS_HZ", 3, ModeLoiterAssisted, _dock_pos_filt_hz, POS_HZ_DEFAULT),
+    AP_GROUPINFO("POS_HZ", 3, ModeLoiterAssisted, _dock_pos_filt_hz, DEFAULT_POS_HZ),
 
     // @Param: WV_WIND
     // @DisplayName: Window Var window size
     // @Description: min samples for window var estimator to provide variance estimate
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("WV_WIND", 4, ModeLoiterAssisted, _wv_window_size, WV_WIND_DEFAULT),
+    AP_GROUPINFO("WV_WIND", 4, ModeLoiterAssisted, _wv_window_size, DEFAULT_WV_WIND),
 
     // @Param: WV_THRESH
     // @DisplayName: Window Var threshold for good docking
     // @Description: Variance threshold that has to be met to enable docking
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("WV_THRESH", 5, ModeLoiterAssisted, _wv_thresh, WV_THRESH_DEFAULT),
+    AP_GROUPINFO("WV_THRESH", 5, ModeLoiterAssisted, _wv_thresh, DEFAULT_WV_THRESH),
 
     // @Param: DOCK_SPD
     // @DisplayName: Dock speed cm/s
@@ -93,113 +88,132 @@ const AP_Param::GroupInfo ModeLoiterAssisted::var_info[] = {
     // @Unit: mps
     // @Range: 0 1000
     // @User: Advanced
-    AP_GROUPINFO("DOCK_SPD", 6, ModeLoiterAssisted, _dock_speed_cm_s, DOCK_SPEED_CM_S_DEFAULT),
-
-    // @Param: UNDOCK_SPD
-    // @DisplayName: UnDock speed cm/s
-    // @Description: speed to escape the target at cm/s
-    // @Unit: mps
-    // @Range: 0 1000
-    // @User: Advanced
-    AP_GROUPINFO("UNDOCK_SPD", 7, ModeLoiterAssisted, _undock_speed_cm_s, UNDOCK_SPEED_CM_S_DEFAULT),
+    AP_GROUPINFO("DOCK_SPD", 6, ModeLoiterAssisted, _dock_speed_cm_s, DEFAULT_DOCK_SPEED_CM_S),
 
     // @Param{Copter}: CID_M
     // @DisplayName: Coast in distance in cm
     // @Description: Coast in distance in cm
     // @Units: cm
     // @User: Advanced
-    AP_GROUPINFO("CID_CM", 8, ModeLoiterAssisted, _coast_in_dist_cm, CID_CM_DEFAULT),
+    AP_GROUPINFO("CI_D_CM", 7, ModeLoiterAssisted, _coast_in_dist_cm, DEFAULT_CID_CM),
 
     // @Param{Copter}: COP_DEG
     // @DisplayName: Wind up pitch angle for wind up to target in degrees
     // @Description: Wind up pitch angle for wind up to target in degrees
     // @Units: deg
     // @User: Advanced
-    AP_GROUPINFO("COP_DEG", 9, ModeLoiterAssisted, _coast_out_pitch_deg, COP_DEG_DEFAULT),
+    AP_GROUPINFO("CO_P_DEG", 8, ModeLoiterAssisted, _coast_out_pitch_deg, DEFAULT_COP_DEG),
 
     // @Param{Copter}: TP_P
     // @DisplayName: Wind up pitch angle for wind up to target in degrees
     // @Description: Wind up pitch angle for wind up to target in degrees
     // @User: Advanced
-    AP_GROUPINFO("TP_P", 10, ModeLoiterAssisted, _thro_pitch_p, DEFAULT_THRO_PITCH_P_GAIN),
+    AP_GROUPINFO("TP_P", 9, ModeLoiterAssisted, _thro_pitch_p, DEFAULT_THRO_PITCH_P_GAIN),
 
     // @Param{Copter}: TP_I
     // @DisplayName: Wind up pitch angle for wind up to target in degrees
     // @Description: Wind up pitch angle for wind up to target in degrees
     // @User: Advanced
-    AP_GROUPINFO("TP_I", 11, ModeLoiterAssisted, _thro_pitch_i, DEFAULT_THRO_PITCH_I_GAIN),
+    AP_GROUPINFO("TP_I", 10, ModeLoiterAssisted, _thro_pitch_i, DEFAULT_THRO_PITCH_I_GAIN),
 
     // @Param{Copter}: TP_D
     // @DisplayName: Wind up pitch angle for wind up to target in degrees
     // @Description: Wind up pitch angle for wind up to target in degrees
     // @User: Advanced
-    AP_GROUPINFO("TP_D", 12, ModeLoiterAssisted, _thro_pitch_d, DEFAULT_THRO_PITCH_D_GAIN),
+    AP_GROUPINFO("TP_D", 11, ModeLoiterAssisted, _thro_pitch_d, DEFAULT_THRO_PITCH_D_GAIN),
 
     // @Param{Copter}: TP_FF
     // @DisplayName: Wind up pitch angle for wind up to target in degrees
     // @Description: Wind up pitch angle for wind up to target in degrees
     // @User: Advanced
-    AP_GROUPINFO("TP_FF", 13, ModeLoiterAssisted, _thro_pitch_ff, DEFAULT_THRO_PITCH_FF_GAIN),
+    AP_GROUPINFO("TP_FF", 12, ModeLoiterAssisted, _thro_pitch_ff, DEFAULT_THRO_PITCH_FF_GAIN),
 
     // @Param{Copter}: TP_IM
     // @DisplayName: Wind up pitch angle for wind up to target in degrees
     // @Description: Wind up pitch angle for wind up to target in degrees
     // @User: Advanced
-    AP_GROUPINFO("TP_IM", 14, ModeLoiterAssisted, _thro_pitch_imax, DEFAULT_THRO_PITCH_IMAX),
+    AP_GROUPINFO("TP_IM", 13, ModeLoiterAssisted, _thro_pitch_imax, DEFAULT_THRO_PITCH_IMAX),
 
     // @Param{Copter}: TP_EHZ
     // @DisplayName: Wind up pitch angle for wind up to target in degrees
     // @Description: Wind up pitch angle for wind up to target in degrees
     // @User: Advanced
-    AP_GROUPINFO("TP_EHZ", 15, ModeLoiterAssisted, _thro_pitch_err_hz, DEFAULT_THRO_PITCH_ERR_HZ),
+    AP_GROUPINFO("TP_EHZ", 14, ModeLoiterAssisted, _thro_pitch_err_hz, DEFAULT_THRO_PITCH_ERR_HZ),
     
     // @Param{Copter}: TP_DHZ
     // @DisplayName: Wind up pitch angle for wind up to target in degrees
     // @Description: Wind up pitch angle for wind up to target in degrees
     // @User: Advanced
-    AP_GROUPINFO("TP_DHZ", 16, ModeLoiterAssisted, _thro_pitch_d_hz, DEFAULT_THRO_PITCH_D_HZ),
+    AP_GROUPINFO("TP_DHZ", 15, ModeLoiterAssisted, _thro_pitch_d_hz, DEFAULT_THRO_PITCH_D_HZ),
 
     // @Param{Copter}: STAT_V
     // @DisplayName: Stationary velocity target
     // @Description: Stationary velocity target
     // @Units: m/s
     // @User: Advanced
-    AP_GROUPINFO("STAT_V", 17, ModeLoiterAssisted, _stationary_vel_m_s, DEFAULT_STATIONARY_VEL_M_S),
+    AP_GROUPINFO("STAT_V_MS", 16, ModeLoiterAssisted, _stationary_vel_m_s, DEFAULT_STATIONARY_VEL_M_S),
 
     // @Param{Copter}: WD_S
     // @DisplayName: Seconds spent winding down throttle
     // @Description: Stationary velocity target
     // @Units: m/s
     // @User: Advanced
-    AP_GROUPINFO("WD_S", 18, ModeLoiterAssisted, _wind_down_decay_time_s, DEFAULT_WINDDOWN_DECAY_TIME_S),
+    AP_GROUPINFO("WD_S", 17, ModeLoiterAssisted, _wind_down_decay_time_s, DEFAULT_WINDDOWN_DECAY_TIME_S),
 
     // @Param{Copter}: CIP_MIN
     // @DisplayName: Min coast in pitch degrees
     // @Description: Stationary velocity target
     // @Units: deg
     // @User: Advanced
-    AP_GROUPINFO("CIP_MIN", 19, ModeLoiterAssisted, _lower_coast_in_pitch_bound_deg, DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG),
+    AP_GROUPINFO("CI_P_MIN", 18, ModeLoiterAssisted, _lower_coast_in_pitch_bound_deg, DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG),
 
     // @Param{Copter}: CIP_MAX
     // @DisplayName: Max coast in pitch degrees
     // @Description: Stationary velocity target
     // @Units: deg
     // @User: Advanced
-    AP_GROUPINFO("CIP_MAX", 20, ModeLoiterAssisted, _upper_coast_in_pitch_bound_deg, DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG),
+    AP_GROUPINFO("CI_P_MAX", 19, ModeLoiterAssisted, _upper_coast_in_pitch_bound_deg, DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG),
 
     // @Param{Copter}: TP_SLEW
     // @DisplayName: Max rate of change of throttle in 0-1 units per second
     // @Description: Max rate of change of throttle in 0-1 units per second
     // @Units: units/s
     // @User: Advanced
-    AP_GROUPINFO("TP_SLEW", 21, ModeLoiterAssisted, _max_TP_throttle_rate, DEFAULT_MAX_TP_THROTTLE_RATE),
+    AP_GROUPINFO("TP_SLEW", 20, ModeLoiterAssisted, _max_TP_throttle_rate, DEFAULT_MAX_TP_THROTTLE_RATE),
     
     // @Param{Copter}: TP_SLEW
     // @DisplayName: Max rate of change of throttle in 0-1 units per second
     // @Description: Max rate of change of throttle in 0-1 units per second
     // @Units: units/s
     // @User: Advanced
-    AP_GROUPINFO("DWUP_DEG", 22, ModeLoiterAssisted, _delta_wind_up_pitch_deg, DEFAULT_DELTA_WIND_UP_PITCH_DEG),
+    AP_GROUPINFO("WU_DP_DEG", 21, ModeLoiterAssisted, _delta_wind_up_pitch_deg, DEFAULT_DELTA_WIND_UP_PITCH_DEG),
+
+    // @Param{Copter}: HN_TOL
+    // @DisplayName: Heading to normal difference tolerance
+    // @Description: Heading to normal difference tolerance
+    // @Units: deg
+    // @User: Advanced
+    AP_GROUPINFO("HN_TOL", 22, ModeLoiterAssisted, _heading_normal_tol_deg, DEFAULT_HEADING_NORMAL_TOL_DEG),
+
+    // @Param{Copter}: REC_TOL
+    // @DisplayName: Recovery tolerance before entering lass
+    // @Description: Recovery tolerance before entering lass
+    // @Units: cm
+    // @User: Advanced
+    AP_GROUPINFO("R_TOL_CM", 23, ModeLoiterAssisted, _recovery_tolerance_cm, DEFAULT_RECOVERY_TOL_CM),
+
+    // @Param{Copter}: WU_TH_MIN
+    // @DisplayName: Min ratio or throttle hover we need to hit 
+    // @Description: Heading to normal difference tolerance
+    // @User: Advanced
+    AP_GROUPINFO("WU_TH_MIN", 24, ModeLoiterAssisted, _windup_throttle_hover_min_ratio, DEFAULT_WIND_UP_THROTTLE_HOVER_MIN_RATIO),
+
+    // @Param{Copter}: CO_D_CM
+    // @DisplayName: Coast out distance cm
+    // @Description: Coast out distance cm
+    // @Units: cm
+    // @User: Advanced
+    AP_GROUPINFO("CO_D_CM", 25, ModeLoiterAssisted, _coast_out_dist_cm, DEFAULT_COAST_OUT_DIST_CM),
     
     AP_GROUPEND
 };
@@ -264,9 +278,6 @@ void ModeLoiterAssisted::run()
     checkDockComms();
     updateFilterParams(); // Update filters (simply check for param changes)
     findDockTarget(); // calculate dock's position. compute navigation data. sets dock related flags
-    float heading_to_dock_rad = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD*DEG_TO_RAD;
-    float heading_to_dock_dist_m = (_cur_pos_NED_m.xy()-_filt_dock_xyz_NEU_m.xy()).length();
-    g2.proximity.curvefit->log_target(heading_to_dock_rad, heading_to_dock_dist_m);
     evaluateFlags(); // evaluate some flags
     sendFlagFeedback(); // send pilot feedback on flags
     
@@ -284,7 +295,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Default(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Default;
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Default state");
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = true;
         break;}
@@ -326,11 +336,9 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Lass;
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Lass state");
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = true;
         Vector3f zero_vel;
-        // pos_control->set_vel_desired_cms(zero_vel);
         break;}
     case Event::EXIT_SIG:{ // exit must return so flight code doesn't get run (maybe split into run transitions and run actions?)
         break;}
@@ -352,7 +360,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
                 }
                 if (!_flags.HEADING_NORMAL_ALIGNED) {
                     GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Heading-normal error: %.4f >= %.4f", 
-                        _heading_normal_error_deg, HEADING_NORMAL_TOL_DEG);
+                        _heading_normal_error_deg, _heading_normal_tol_deg.get());
                     _last_send_lass = millis();
                 }
             }
@@ -418,7 +426,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::LeadUp;
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering LeadUp state");
         gcs().send_named_float("lass", float(_lass_state_name));
         #if AP_DDS_ENABLED
         AP_DDS_Client::need_to_pub_attach_detach = true;
@@ -485,7 +492,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastIn(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::CoastIn;
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastIn state");
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = false;
         _coast_in_pitch_cd = pos_control->get_pitch_cd();
@@ -537,7 +543,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::WindDown;
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindDown state");
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = false;
         _wind_down_throttle_start = attitude_control->get_throttle_in();
@@ -589,7 +594,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Vegetable(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Vegetable;
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Vegetable state");
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = false;
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::SHUT_DOWN);
@@ -622,14 +626,12 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::WindUp;
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering WindUp state");
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = false;
         _is_taking_off = true;
         set_land_complete(false);
         attitude_control->reset_rate_controller_I_terms();
         attitude_control->reset_target_and_rate();
-        // _wind_up_start_ms = millis();
         attitude_control->set_throttle_out(0.0f, false, g.throttle_filt); // Start at zero throttle
         _thro_pitch_pid.reset_filter();
         _thro_pitch_pid.reset_I();
@@ -643,17 +645,15 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         motors->disable_throttle_hover_learn(false);
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        // if (_flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
         if (_flags.AT_WIND_UP_THROTTLE && _flags.DETACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);} 
         else if (_flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::WindDown);} 
-        else {
-            float vel_ms = _velocity_NED_m.length();
-            float pitch_deg = ahrs.get_pitch()*RAD_TO_DEG;
+        else if (_flags.DETACH_BUTTON_PRESSED){
             if (millis()-_last_send_windup > _statustext_period_ms) {
-                GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "vel m/s: %.4f pitch deg: %.4f", vel_ms, pitch_deg); // TODO remove or rate limit
+                GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "thro: %.4f", motors->get_throttle_out());
                 _last_send_windup = millis();
             }
         }
+        else{}
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
@@ -701,7 +701,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::CoastOut(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::CoastOut;
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering CoastOut state");
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = true;
         
@@ -746,7 +745,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
     switch (e) {
     case Event::ENTRY_SIG:{
         _lass_state_name = StateName::Recover;
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "LASS: Entering Recover state");
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = true;
         // If no recovery pos exists, set one 2 meters back and .5 meter up?
@@ -864,7 +862,7 @@ void ModeLoiterAssisted::findDockTarget(){
         // Filter and evaluate dock normal vector
         _filt_dock_normal_NEU = _dock_norm_filter.apply(dock_normal_vec);
         _heading_normal_error_deg = wrap_PI(ahrs.get_yaw() - _filt_dock_normal_NEU.angle() + float(M_PI))*RAD_TO_DEG;
-        if (abs(_heading_normal_error_deg) < HEADING_NORMAL_TOL_DEG) {
+        if (abs(_heading_normal_error_deg) < _heading_normal_tol_deg.get()) {
             _flags.HEADING_NORMAL_ALIGNED = true;
         } else {
             _flags.HEADING_NORMAL_ALIGNED = false;
@@ -892,7 +890,6 @@ void ModeLoiterAssisted::WindDownUnSafe() { // init detach engaged via RC_Channe
 
 void ModeLoiterAssisted::set_attached_status(float att_st) { // start being attached
     _flags.ATTACHED = !is_zero(att_st);
-    // GCS_SEND_TEXT(MAV_SEVERITY_INFO,"Attached Status: %d\n", _flags.ATTACHED);
     _last_att_st_time = millis();
     _flags.DOCK_COMMS_HEALTHY = true;
 }
@@ -901,15 +898,6 @@ void ModeLoiterAssisted::checkDockComms() {
     if (millis() - _last_att_st_time > DOCK_COMMS_PERIOD_MS) {
         _flags.DOCK_COMMS_HEALTHY = false;
     }
-}
-
-// This function interprets what the pilot is attempting, and returns feedback
-void ModeLoiterAssisted::sendFlagFeedback() { 
-    // if (_flags.ATTACH_BUTTON_PRESSED) { // Pilot wants to engage docking mode
-    //     if (!_flags.DOCK_STABLE) {
-
-    //     }
-    // }
 }
 
 void ModeLoiterAssisted::logLass() { 
@@ -985,13 +973,13 @@ void ModeLoiterAssisted::evaluateFlags() { // ALL FLAGS MUST BE SET TO FALSE INI
 
     // Check if we are at the recovery position
     float dist_to_recovery_pos_cm = (_recovery_position_NED_m-_cur_pos_NED_m).length()*M_TO_CM;
-    if (dist_to_recovery_pos_cm < RECOVERY_DIST_THRESH_CM) {
+    if (dist_to_recovery_pos_cm < _recovery_tolerance_cm) {
         _flags.AT_RECOVERY_POSITION = true;
     }
 
     // Check if we are beyond the coast out distance
     float dist_from_docked_pos_cm = (_docked_position_NED_m.xy()-_cur_pos_NED_m.xy()).length()*M_TO_CM;
-    if (dist_from_docked_pos_cm > COAST_OUT_DIST_CM) {
+    if (dist_from_docked_pos_cm > _coast_out_dist_cm.get()) {
         _flags.BEYOND_COAST_OUT_DIST = true;
     }
 
@@ -1010,7 +998,7 @@ void ModeLoiterAssisted::evaluateFlags() { // ALL FLAGS MUST BE SET TO FALSE INI
     _flags.VEHICLE_STATIONARY = (_velocity_NED_m.length() <= _stationary_vel_m_s.get());
 
     // Check if we are at the wind up pitch
-    _flags.AT_WIND_UP_THROTTLE = motors->get_throttle_out() > motors->get_throttle_hover()*WIND_UP_THROTTLE_HOVER_THRESHOLD;
+    _flags.AT_WIND_UP_THROTTLE = motors->get_throttle_out() > motors->get_throttle_hover()*_windup_throttle_hover_min_ratio;
 }
 
 void ModeLoiterAssisted::abortExit() {
