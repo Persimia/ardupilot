@@ -9,8 +9,6 @@
 #if AP_PROXIMITY_CURVEFIT_ENABLED
 #define LARGE_FLOAT 1.0e3
 #define QUANTIZATION 1.0E-3
-#define DEFAULT_TRUNCATION_DISTANCE_M 0.7
-#define DEFAULT_LIDAR_SCAN_PITCH_DEG 1.33
 
 const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @Param{Copter}: _GIMBAL
@@ -57,7 +55,7 @@ const AP_Param::GroupInfo AP_Proximity_CurveFit::var_info[] = {
     // @DisplayName: Proximity Curvefit Truncation distance cutoff
     // @Description: Proximity Curvefit Truncation distance cutoff
     // @User: Advanced
-    AP_GROUPINFO("_TRNC_M", 6, AP_Proximity_CurveFit, _truncation_distance_m, DEFAULT_TRUNCATION_DISTANCE_M),
+    AP_GROUPINFO("_TRNC_M", 6, AP_Proximity_CurveFit, _truncation_distance_m, 0.3f),
 
     // @Param{Copter}: _GIM_FW
     // @DisplayName: Proximity Curvefit Gimbal forward distance m
