@@ -1327,14 +1327,12 @@ protected:
     const char *name4() const override { return "LASS"; }
 
 private:
-    // Define parameters
     AP_Float _vel_max_cm_s;
     AP_Float _min_obs_dist_cm;
     AP_Float _dock_pos_filt_hz;
     AP_Int32 _wv_window_size;
     AP_Float _wv_thresh;
     AP_Float _dock_speed_cm_s;
-    AP_Float _undock_speed_cm_s;
     AP_Float _coast_in_dist_cm;
     AP_Float _coast_out_pitch_deg;
     AP_Float _thro_pitch_p;
@@ -1350,11 +1348,61 @@ private:
     AP_Float _upper_coast_in_pitch_bound_deg;
     AP_Float _max_TP_throttle_rate;
     AP_Float _delta_wind_up_pitch_deg;
+    AP_Float _heading_normal_tol_deg;
+    AP_Float _recovery_tolerance_cm;
+    AP_Float _windup_throttle_hover_min_ratio;
+    AP_Float _coast_out_dist_cm;
 
+    void findDockTarget();
+    void abortExit();
+    void InitFilters();
+    void updateFilterParams();
+    void evaluateFlags();
+    void logLass();
+    void set_attitude_control_rate_limits(float limit_degs);
+    void unset_attitude_control_rate_limits();
+    void checkDockComms();
 
-    //====================================================================
-    /*---------------------------------------------------------------------------*/
-    /* Finite State Machine facilities... */
+    bool _crash_check_enabled {true};
+    bool _is_taking_off{false};
+
+    float _wind_up_pitch_deg;
+    float _wind_up_throttle;
+    float _heading_normal_error_deg;
+    float _dock_target_var;
+    float _original_roll_limit;
+    float _original_pitch_limit;
+    float _original_yaw_limit;
+    float _locked_heading_deg;
+    float _dist_to_dock_cm;
+    float _coast_in_pitch_cd;
+    float _wind_down_throttle_start;
+    float _last_cfit_center_xy_m_x;
+    float _last_cfit_center_xy_m_y;
+
+    uint32_t _last_att_st_time;
+    uint32_t _last_send_lass;
+    uint32_t _wind_down_start_ms; // start of wind down maneuver
+    uint32_t _log_period_ms = 100;
+    uint32_t _statustext_period_ms = 1000;
+    uint32_t _last_send_windup;
+    uint32_t _last_lass_log_time;
+    uint32_t _last_lasm_log_time;
+
+    Vector2f _filt_dock_normal_NEU;
+    Vector2f _locked_vel_NE_cm_s;
+    Vector2f _locked_dock_pos_NE_m{INFINITY, INFINITY};
+    Vector2f _last_vehicle_pos;
+
+    Vector3f _velocity_NED_m;
+    Vector3f _recovery_position_NED_m; // Position where leadup state was entered 
+    Vector3f _docked_position_NED_m;
+    Vector3f _cur_pos_NED_m;
+    Vector3f _filt_dock_xyz_NEU_m;
+
+    LowPassFilterVector3f _dock_pos_filter;
+    LowPassFilterVector2f _dock_norm_filter;
+
     enum class Event : uint8_t {
         NONE = 0, /* dispatched to AO before entering event-loop */
         ENTRY_SIG, /* for triggering the entry action in a state */
@@ -1388,10 +1436,9 @@ private:
     typedef Status (ModeLoiterAssisted::*StateHandler)(const Event e);
     void evaluate_transitions();
     void runFlightCode();
-    void runExitCode();
+    void runStateExitCode();
     Flags evaluate_flags();
-    /*---------------------------------------------------------------------------*/
-    /* Finite State Machine States... */
+
     Status Default(const Event e);
     Status Lass(const Event e);
     Status LeadUp(const Event e);
@@ -1417,50 +1464,9 @@ private:
 
     StateHandler _lass_state = &ModeLoiterAssisted::Default;
     StateName _lass_state_name = StateName::Default;
-    /*---------------------------------------------------------------------------*/
-    /* Finite State Machine Macros... */
-    #define TRAN(target_) (_lass_state = (StateHandler)(target_), Status::TRAN_STATUS)
-    /*---------------------------------------------------------------------------*/
-    //====================================================================
 
-    /*---------------------------------------------------------------------------*/
-    /* Dock target variables... */
-    // float _filt_heading_cmd_deg;
-    void findDockTarget();
-    void abortExit();
-    void InitFilters();
-    void updateFilterParams();
-    void evaluateFlags();
-    void logLass();
-    void sendFlagFeedback();
-    void set_attitude_control_rate_limits(float limit_degs);
-    void unset_attitude_control_rate_limits();
-    void checkDockComms();
-    float _wind_up_pitch_deg;
-    float _wind_up_throttle;
-    float _heading_normal_error_deg;
-    uint32_t _last_att_st_time;
-    Vector3f _velocity_NED_m;
-    uint32_t _last_send_lass;
-    float _dock_target_var;
-    float _original_roll_limit;
-    float _original_pitch_limit;
-    float _original_yaw_limit;
-    Vector2f _filt_dock_normal_NEU;
-    float _locked_heading_deg;
-    Vector2f _locked_vel_NE_cm_s;
-    Vector2f _locked_dock_pos_NE_m{INFINITY, INFINITY};
-    float _dist_to_dock_cm;
-    float _coast_in_pitch_cd;
-    float _wind_down_throttle_start;
-    uint32_t _wind_down_start_ms; // start of wind down maneuver
-    uint32_t _wind_up_start_ms; // start of wind down maneuver
-    uint32_t _log_period_ms = 100;
-    uint32_t _statustext_period_ms = 1000;
-    Vector3f _recovery_position_NED_m; // Position where leadup state was entered 
-    uint32_t _last_send_windup;
-    Vector3f _docked_position_NED_m;
-    bool _is_taking_off{false};
+    #define TRAN(target_) (_lass_state = (StateHandler)(target_), Status::TRAN_STATUS)
+
     struct lasmData {
         float tpX = AP::logger().quiet_nanf(); // cmded x position NEU m
         float tpY = AP::logger().quiet_nanf(); // cmded y position NEU m
@@ -1474,6 +1480,7 @@ private:
         float thr = AP::logger().quiet_nanf(); // cmded throttle unitless
     };
     void logLasm(const lasmData &data);
+
     AC_PID_Basic _thro_pitch_pid{
         0.01f,  // initial P gain
         0.01f, // initial I gain
@@ -1484,56 +1491,21 @@ private:
         400.0f  // derivative filter frequency in Hz
     }; // Initial gains: kP, kI, kD, and integrator max
     
-
-    float _dock_variance;
-    float _distance_target_cm;
-    Vector2p _xy_pos; // xy pos in NEU cm
-    Vector2f _xy_vel_cm_s; // xy vel in NEU cm
-    const Vector2f _xy_accel{0,0};
-    float _z_pos;
-    float _z_vel{0};
-    const float _z_accel{0};
-    float _filt_yaw_cmd_deg;
-    float _bearing_cd;
-    uint32_t _last_lass_log_time;
-    uint32_t _last_lasm_log_time;
-    Vector3f _cur_pos_NED_m;
-    Vector3f _filt_dock_xyz_NEU_m;
-    /*---------------------------------------------------------------------------*/
-
-
-    bool _crash_check_enabled {true};
-
-
-    float _last_cfit_center_xy_m_x;
-    float _last_cfit_center_xy_m_y;
-
-    Vector2f _last_vehicle_pos;
-
-    LowPassFilterFloat _yaw_filter;
-    LowPassFilterFloat _dist_filter;
-    LowPassFilterVector3f _dock_pos_filter;
-    LowPassFilterVector2f _dock_norm_filter;
-
     class WindowVar {
         public:
-            // Members of the nested class
             WindowVar() : WindowVar(10) {}
             WindowVar(int32_t window_size) : _window_size(window_size), _sum(Vector3f(0.0f,0.0f,0.0f)), _sum_of_squares(Vector3f(0.0f,0.0f,0.0f)) {}
             bool apply(Vector3f value, Vector3f &current_variance);
             void reset();
             int32_t get_window_size(){return _window_size;}
             void set_new_window_size(int32_t new_size){_window_size=new_size;}
-
         private:
             size_t _window_size;
             std::deque<Vector3f> _values;
             Vector3f _sum;              // Sum of the _values in the window
             Vector3f _sum_of_squares;   // Sum of the squares of the _values
     };
-    
     WindowVar _dock_target_window_var;
-    bool _ready_to_dock{false};
 };
 
 

@@ -86,7 +86,7 @@ private:
         Vector2f& tangent_vec, Vector2f& normal_vec, Vector2f& center, 
         float& fit_quality);
 
-    void find_closest_index(const Vector2f curr_pos, int &closest_index, float &closest_distance);
+    // void find_closest_index(const Vector2f curr_pos, int &closest_index);
 
     Vector2f _points_NE_origin[2*CURVEFIT_DATA_LEN];
     int _read_start = 0;
@@ -96,9 +96,9 @@ private:
     int _write_end = CURVEFIT_DATA_LEN;
 
     float _last_angle;
-    uint8_t _last_dir;
-    bool _reset_flag;
-    bool _first_time_range_error{true};
+    int _write_nearest_valid_point_index;
+    int _read_nearest_valid_point_index;
+    float _nearest_valid_point_angle_deg = INFINITY;
 
     uint8_t _min_req_for_line{3};
 
@@ -116,16 +116,12 @@ private:
     AP_Float _rng_max_m;
     AP_Float _rng_min_m;
     AP_Float _truncation_distance_m;
-    AP_Float _lidar_scan_pitch_deg;
     AP_Float _gimbal_forward_m;
     AP_Float _gimbal_right_m;
     AP_Float _gimbal_up_m;
 
-
     float _fit_quality;
     int _fit_num;
-
-    LowPassFilterVector2f _center_filter;
 };
 
 #endif
