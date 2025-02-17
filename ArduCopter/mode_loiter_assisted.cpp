@@ -776,9 +776,11 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
         Vector2f acc_xy;
         pos_control->input_pos_vel_accel_xy(pos_xy, vel_xy, acc_xy);
 
-        float pos_z = -_recovery_position_NED_m.z*M_TO_CM;
-        float vel_z = 0.0f;
-        pos_control->input_pos_vel_accel_z(pos_z, vel_z, 0.0f);
+        // float pos_z = -_recovery_position_NED_m.z*M_TO_CM;
+        // float vel_z = 0.0f;
+        // pos_control->input_pos_vel_accel_z(pos_z, vel_z, 0.0f);
+
+        pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
 
         pos_control->update_xy_controller();
         pos_control->update_z_controller();
