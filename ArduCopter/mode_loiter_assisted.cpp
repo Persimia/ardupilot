@@ -373,6 +373,10 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         Vector2f target_xy_body_vel_cm_s = get_pilot_desired_velocity_xy(_vel_max_cm_s.get());
         Vector2f target_xy_NE_vel_cm_s = target_xy_body_vel_cm_s;
         target_xy_NE_vel_cm_s.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
+
+        // Compute ideal position (Along normal vec)
+        Vector2f pos_on_normal_NE_m = _filt_dock_xyz_NEU_m.xy() + _filt_dock_normal_NE * _min_obs_dist_cm.get();
+
         // integrate position with velocity command
         Vector2f target_xy_NE_cm = _cur_pos_NED_m.xy()*M_TO_CM + target_xy_NE_vel_cm_s;
         Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NE_cm;
@@ -435,7 +439,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         
         
         float heading_rad = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD*DEG_TO_RAD;
-        // float heading_rad = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x);
+        // float heading_rad = atan2f(-_filt_dock_normal_NE.y,-_filt_dock_normal_NE.x);
         _locked_heading_deg = heading_rad*RAD_TO_DEG;
         _locked_vel_NE_cm_s = Vector2f(cosf(heading_rad),sinf(heading_rad))*_dock_speed_cm_s;
         _recovery_position_NED_m = _cur_pos_NED_m;
@@ -859,8 +863,8 @@ void ModeLoiterAssisted::findDockTarget(){
             }
         }
         // Filter and evaluate dock normal vector
-        _filt_dock_normal_NEU = _dock_norm_filter.apply(dock_normal_vec);
-        _heading_normal_error_deg = wrap_PI(ahrs.get_yaw() - _filt_dock_normal_NEU.angle() + float(M_PI))*RAD_TO_DEG;
+        _filt_dock_normal_NE = _dock_norm_filter.apply(dock_normal_vec);
+        _heading_normal_error_deg = wrap_PI(ahrs.get_yaw() - _filt_dock_normal_NE.angle() + float(M_PI))*RAD_TO_DEG;
         if (abs(_heading_normal_error_deg) < _heading_normal_tol_deg.get()) {
             _flags.HEADING_NORMAL_ALIGNED = true;
         } else {
@@ -927,7 +931,7 @@ void ModeLoiterAssisted::logLass() {
         AP_HAL::micros64(),
         _filt_dock_xyz_NEU_m.x,
         _filt_dock_xyz_NEU_m.y,
-        _filt_dock_normal_NEU.angle(),
+        _filt_dock_normal_NE.angle()*RAD_TO_DEG,
         uint8_t(_lass_state_name),
         flags_bitmask,
         _velocity_NED_m.length()

@@ -1389,7 +1389,7 @@ private:
     uint32_t _last_lass_log_time;
     uint32_t _last_lasm_log_time;
 
-    Vector2f _filt_dock_normal_NEU;
+    Vector2f _filt_dock_normal_NE;
     Vector2f _locked_vel_NE_cm_s;
     Vector2f _locked_dock_pos_NE_m{INFINITY, INFINITY};
     Vector2f _last_vehicle_pos;
