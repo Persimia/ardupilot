@@ -8,7 +8,7 @@
 
 // Parameter defaults
 #define DEFAULT_VEL_MAX                             100.0f
-#define DEFAULT_MIN_OBS_DIST_CM                     200.0f // closest you can get to obstacle in lass
+#define DEFAULT_MIN_OBS_DIST_CM                     250.0f // closest you can get to obstacle in lass
 #define DEFAULT_POS_HZ                              2.0f // lower means less trust of new measurements
 #define DEFAULT_WV_WIND                             5
 #define DEFAULT_WV_THRESH                           0.1f 
@@ -26,7 +26,7 @@
 #define DEFAULT_WINDDOWN_DECAY_TIME_S               6.0f // time to winddown throttle in seconds 
 #define DEFAULT_LOWER_COAST_IN_PITCH_BOUND_DEG      -5.0f
 #define DEFAULT_UPPER_COAST_IN_PITCH_BOUND_DEG      -2.0f
-#define DEFAULT_MAX_TP_THROTTLE_RATE                1.0f // ten percent throttle per second default (~3-4 sec for hover throttle)
+#define DEFAULT_MAX_TP_THROTTLE_RATE                0.1f // ten percent throttle per second default (~3-4 sec for hover throttle)
 #define DEFAULT_DELTA_WIND_UP_PITCH_DEG             2.0f
 #define DEFAULT_HEADING_NORMAL_TOL_DEG              10.0f    // degrees between heading and dock surface normal.
 #define DEFAULT_RECOVERY_TOL_CM                     10.0f
@@ -368,24 +368,27 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
-        // xy controller... TODO Change to velocity control!
+        // // xy controller... TODO Change to velocity control!
+        // float filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD;
+        // Vector2f target_xy_body_vel_cm_s = get_pilot_desired_velocity_xy(_vel_max_cm_s.get());
+        // Vector2f target_xy_NE_vel_cm_s = target_xy_body_vel_cm_s;
+        // target_xy_NE_vel_cm_s.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
+
+        // // integrate position with velocity command
+        // Vector2f target_xy_NE_cm = _cur_pos_NED_m.xy()*M_TO_CM + target_xy_NE_vel_cm_s;
+        // Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NE_cm;
+        // float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
+        // if (target_to_dock_dist_cm < _min_obs_dist_cm.get()) {
+        //     // if integrated position is too close, adjust to nearest pos that fits min distance condition
+        //     Vector2f min_dist_correction_vec_cm = target_to_dock_vec_cm.normalized()*abs(target_to_dock_dist_cm-_min_obs_dist_cm.get());
+        //     target_xy_NE_cm -= min_dist_correction_vec_cm;
+        //     // target_xy_NE_vel_cm_s -= min_dist_correction_vec_cm/G_Dt;
+        // }
+
+        // Compute ideal position (Along normal vec)
         float filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD;
-        Vector2f target_xy_body_vel_cm_s = get_pilot_desired_velocity_xy(_vel_max_cm_s.get());
-        Vector2f target_xy_NE_vel_cm_s = target_xy_body_vel_cm_s;
-        target_xy_NE_vel_cm_s.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
-        // integrate position with velocity command
-        Vector2f target_xy_NE_cm = _cur_pos_NED_m.xy()*M_TO_CM + target_xy_NE_vel_cm_s;
-        Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NE_cm;
-        float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
-        if (target_to_dock_dist_cm < _min_obs_dist_cm.get()) {
-            // if integrated position is too close, adjust to nearest pos that fits min distance condition
-            Vector2f min_dist_correction_vec_cm = target_to_dock_vec_cm.normalized()*abs(target_to_dock_dist_cm-_min_obs_dist_cm.get());
-            target_xy_NE_cm -= min_dist_correction_vec_cm;
-            // target_xy_NE_vel_cm_s -= min_dist_correction_vec_cm/G_Dt;
-        }
-        // pos_control->set_pos_target_xy_cm(target_xy_NE_cm.x, target_xy_NE_cm.y);
+        Vector2f target_xy_NE_cm = _filt_dock_xyz_NEU_m.xy()*100.0f + _filt_dock_normal_NE * _min_obs_dist_cm.get();
         Vector2p pos_xy = target_xy_NE_cm.topostype();
-        // Vector2f vel_xy = target_xy_NE_vel_cm_s;
         Vector2f vel_xy;
         Vector2f acc_xy;
         pos_control->input_pos_vel_accel_xy(pos_xy, vel_xy, acc_xy);
@@ -435,7 +438,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         
         
         float heading_rad = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD*DEG_TO_RAD;
-        // float heading_rad = atan2f(-_filt_dock_normal_NEU.y,-_filt_dock_normal_NEU.x);
+        // float heading_rad = atan2f(-_filt_dock_normal_NE.y,-_filt_dock_normal_NE.x);
         _locked_heading_deg = heading_rad*RAD_TO_DEG;
         _locked_vel_NE_cm_s = Vector2f(cosf(heading_rad),sinf(heading_rad))*_dock_speed_cm_s;
         _recovery_position_NED_m = _cur_pos_NED_m;
@@ -773,9 +776,11 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
         Vector2f acc_xy;
         pos_control->input_pos_vel_accel_xy(pos_xy, vel_xy, acc_xy);
 
-        float pos_z = -_recovery_position_NED_m.z*M_TO_CM;
-        float vel_z = 0.0f;
-        pos_control->input_pos_vel_accel_z(pos_z, vel_z, 0.0f);
+        // float pos_z = -_recovery_position_NED_m.z*M_TO_CM;
+        // float vel_z = 0.0f;
+        // pos_control->input_pos_vel_accel_z(pos_z, vel_z, 0.0f);
+
+        pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
 
         pos_control->update_xy_controller();
         pos_control->update_z_controller();
@@ -859,8 +864,8 @@ void ModeLoiterAssisted::findDockTarget(){
             }
         }
         // Filter and evaluate dock normal vector
-        _filt_dock_normal_NEU = _dock_norm_filter.apply(dock_normal_vec);
-        _heading_normal_error_deg = wrap_PI(ahrs.get_yaw() - _filt_dock_normal_NEU.angle() + float(M_PI))*RAD_TO_DEG;
+        _filt_dock_normal_NE = _dock_norm_filter.apply(dock_normal_vec);
+        _heading_normal_error_deg = wrap_PI(ahrs.get_yaw() - _filt_dock_normal_NE.angle() + float(M_PI))*RAD_TO_DEG;
         if (abs(_heading_normal_error_deg) < _heading_normal_tol_deg.get()) {
             _flags.HEADING_NORMAL_ALIGNED = true;
         } else {
@@ -927,7 +932,7 @@ void ModeLoiterAssisted::logLass() {
         AP_HAL::micros64(),
         _filt_dock_xyz_NEU_m.x,
         _filt_dock_xyz_NEU_m.y,
-        _filt_dock_normal_NEU.angle(),
+        _filt_dock_normal_NE.angle()*RAD_TO_DEG,
         uint8_t(_lass_state_name),
         flags_bitmask,
         _velocity_NED_m.length()
