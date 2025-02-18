@@ -1395,7 +1395,7 @@ private:
     Vector2f _last_vehicle_pos;
 
     Vector3f _velocity_NED_m;
-    Vector3f _recovery_position_NED_m; // Position where leadup state was entered 
+    Vector2f _recovery_position_NE_m; // Position where leadup state was entered 
     Vector3f _docked_position_NED_m;
     Vector3f _cur_pos_NED_m;
     Vector3f _filt_dock_xyz_NEU_m;

@@ -368,23 +368,6 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Lass(const Event e) {
         break;}
     case Event::RUN_FLIGHT_CODE:{
         // Flight Code
-        // // xy controller... TODO Change to velocity control!
-        // float filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD;
-        // Vector2f target_xy_body_vel_cm_s = get_pilot_desired_velocity_xy(_vel_max_cm_s.get());
-        // Vector2f target_xy_NE_vel_cm_s = target_xy_body_vel_cm_s;
-        // target_xy_NE_vel_cm_s.rotate(filt_heading_cmd_deg * DEG_TO_RAD);
-
-        // // integrate position with velocity command
-        // Vector2f target_xy_NE_cm = _cur_pos_NED_m.xy()*M_TO_CM + target_xy_NE_vel_cm_s;
-        // Vector2f target_to_dock_vec_cm = _filt_dock_xyz_NEU_m.xy()*100 - target_xy_NE_cm;
-        // float target_to_dock_dist_cm = target_to_dock_vec_cm.length();
-        // if (target_to_dock_dist_cm < _min_obs_dist_cm.get()) {
-        //     // if integrated position is too close, adjust to nearest pos that fits min distance condition
-        //     Vector2f min_dist_correction_vec_cm = target_to_dock_vec_cm.normalized()*abs(target_to_dock_dist_cm-_min_obs_dist_cm.get());
-        //     target_xy_NE_cm -= min_dist_correction_vec_cm;
-        //     // target_xy_NE_vel_cm_s -= min_dist_correction_vec_cm/G_Dt;
-        // }
-
         // Compute ideal position (Along normal vec)
         float filt_heading_cmd_deg = get_bearing_cd(_cur_pos_NED_m.xy(),_filt_dock_xyz_NEU_m.xy())/DEG_TO_CD;
         Vector2f target_xy_NE_cm = _filt_dock_xyz_NEU_m.xy()*100.0f + _filt_dock_normal_NE * _min_obs_dist_cm.get();
@@ -441,7 +424,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
         // float heading_rad = atan2f(-_filt_dock_normal_NE.y,-_filt_dock_normal_NE.x);
         _locked_heading_deg = heading_rad*RAD_TO_DEG;
         _locked_vel_NE_cm_s = Vector2f(cosf(heading_rad),sinf(heading_rad))*_dock_speed_cm_s;
-        _recovery_position_NED_m = _cur_pos_NED_m;
+        _recovery_position_NE_m = _cur_pos_NED_m.xy();
         _locked_dock_pos_NE_m = _filt_dock_xyz_NEU_m.xy();
 
         pos_control->set_max_speed_accel_xy(_dock_speed_cm_s, LEADUP_ACCELMAX_CMSS);
@@ -750,11 +733,10 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
         gcs().send_named_float("lass", float(_lass_state_name));
         _crash_check_enabled = true;
         // If no recovery pos exists, set one 2 meters back and .5 meter up?
-        if (is_zero(_recovery_position_NED_m.x) && is_zero(_recovery_position_NED_m.y) && is_zero(_recovery_position_NED_m.z)) {
+        if (is_zero(_recovery_position_NE_m.x) && is_zero(_recovery_position_NE_m.y)) {
             Vector2f unit_heading_vec{1.0f,0.0f};
             unit_heading_vec.rotate(ahrs.get_yaw());
-            _recovery_position_NED_m.xy() = _cur_pos_NED_m.xy() - unit_heading_vec * BACKUP_RECOVERY_DIST_BACK_M;
-            _recovery_position_NED_m.z = _cur_pos_NED_m.z - BACKUP_RECOVERY_DIST_UP_M; // subtract because NED not NEU!
+            _recovery_position_NE_m = _cur_pos_NED_m.xy() - unit_heading_vec * BACKUP_RECOVERY_DIST_BACK_M;
         }
         if (!pos_control->is_active_z()) {
             pos_control->init_z_controller();
@@ -771,14 +753,10 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
         // else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
-        Vector2p pos_xy = (_recovery_position_NED_m.xy()*M_TO_CM).topostype();
+        Vector2p pos_xy = (_recovery_position_NE_m*M_TO_CM).topostype();
         Vector2f vel_xy;
         Vector2f acc_xy;
         pos_control->input_pos_vel_accel_xy(pos_xy, vel_xy, acc_xy);
-
-        // float pos_z = -_recovery_position_NED_m.z*M_TO_CM;
-        // float vel_z = 0.0f;
-        // pos_control->input_pos_vel_accel_z(pos_z, vel_z, 0.0f);
 
         pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
 
@@ -787,9 +765,9 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::Recover(const Event e) {
         attitude_control->input_thrust_vector_rate_heading(pos_control->get_thrust_vector(), 0.0f, true);
         
         lasmData data;
-        data.tpX = _recovery_position_NED_m.x,
-        data.tpY = _recovery_position_NED_m.y,
-        data.tpZ = _recovery_position_NED_m.z,
+        data.tpX = pos_xy.x,
+        data.tpY = pos_xy.y,
+        data.tvZ = 0.0f,
         data.hdg = ahrs.get_yaw()*RAD_TO_DEG;
         logLasm(data);
 
@@ -976,7 +954,7 @@ void ModeLoiterAssisted::evaluateFlags() { // ALL FLAGS MUST BE SET TO FALSE INI
     _flags.AT_WIND_UP_THROTTLE = false;
 
     // Check if we are at the recovery position
-    float dist_to_recovery_pos_cm = (_recovery_position_NED_m-_cur_pos_NED_m).length()*M_TO_CM;
+    float dist_to_recovery_pos_cm = (_recovery_position_NE_m-_cur_pos_NED_m.xy()).length()*M_TO_CM;
     if (dist_to_recovery_pos_cm < _recovery_tolerance_cm) {
         _flags.AT_RECOVERY_POSITION = true;
     }
