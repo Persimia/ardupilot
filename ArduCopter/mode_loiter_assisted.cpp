@@ -13,7 +13,7 @@
 #define DEFAULT_WV_WIND                             5
 #define DEFAULT_WV_THRESH                           0.1f 
 #define DEFAULT_DOCK_SPEED_CM_S                     40.0f
-#define DEFAULT_CID_CM                              80.0f // coast in distance
+#define DEFAULT_CID_CM                              100.0f // coast in distance
 #define DEFAULT_COP_DEG                             5.0f
 #define DEFAULT_THRO_PITCH_P_GAIN                   0.01f  // initial P gain
 #define DEFAULT_THRO_PITCH_I_GAIN                   0.0f // initial I gain
@@ -436,7 +436,7 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::LeadUp(const Event e) {
     case Event::EVALUATE_TRANSITIONS:{
         if (_flags.WITHIN_COAST_IN_DIST) {status = TRAN(&ModeLoiterAssisted::CoastIn);}
         else if (_flags.ATTACHED) {status = TRAN(&ModeLoiterAssisted::CoastIn);}
-        else if (!_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::Lass);}
+        else if (!_flags.ATTACH_BUTTON_PRESSED) {status = TRAN(&ModeLoiterAssisted::CoastOut);}
         else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
@@ -541,7 +541,8 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindDown(const Event e) {
         motors->disable_throttle_hover_learn(false);
         break;}
     case Event::EVALUATE_TRANSITIONS:{
-        if (_flags.VEHICLE_STATIONARY && _flags.THROTTLE_WOUND_DOWN) {status = TRAN(&ModeLoiterAssisted::Vegetable);} // are both necessary?
+        if (!_flags.WU_WD_CONFIRMATION) {status = TRAN(&ModeLoiterAssisted::WindUp);}
+        else if (_flags.VEHICLE_STATIONARY && _flags.THROTTLE_WOUND_DOWN) {status = TRAN(&ModeLoiterAssisted::Vegetable);} // are both necessary?
         else {}
         break;}
     case Event::RUN_FLIGHT_CODE:{
