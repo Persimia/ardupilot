@@ -618,10 +618,11 @@ ModeLoiterAssisted::Status ModeLoiterAssisted::WindUp(const Event e) {
         set_land_complete(false);
         attitude_control->reset_rate_controller_I_terms();
         attitude_control->reset_target_and_rate();
-        attitude_control->set_throttle_out(0.0f, false, g.throttle_filt); // Start at zero throttle
+        _wind_up_throttle = motors->get_throttle_out();
+        // attitude_control->set_throttle_out(0.0f, false, g.throttle_filt); // Start at zero throttle
         _thro_pitch_pid.reset_filter();
         _thro_pitch_pid.reset_I();
-        _wind_up_throttle = 0.0f;
+        // _wind_up_throttle = 0.0f;
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
         motors->disable_throttle_hover_learn(true);
         _wind_up_pitch_deg = ahrs.get_pitch()*RAD_TO_DEG - _delta_wind_up_pitch_deg;
