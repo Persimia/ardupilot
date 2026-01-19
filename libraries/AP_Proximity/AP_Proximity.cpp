@@ -31,6 +31,7 @@
 #include "AP_Proximity_Scripting.h"
 #include "AP_Proximity_LD06.h"
 #include "AP_Proximity_MR72_CAN.h"
+#include "AP_Proximity_MS200P.h"
 
 
 #include <AP_Logger/AP_Logger.h>
@@ -258,6 +259,15 @@ void AP_Proximity::init()
             if (AP_Proximity_LD06::detect(serial_instance)) {
                 state[instance].instance = instance;
                 drivers[instance] = NEW_NOTHROW AP_Proximity_LD06(*this, state[instance], params[instance], serial_instance);
+                serial_instance++;
+            }
+            break;
+#endif
+#if AP_PROXIMITY_MS200P_ENABLED
+        case Type::MS200P:
+            if (AP_Proximity_MS200P::detect(serial_instance)) {
+                state[instance].instance = instance;
+                drivers[instance] = NEW_NOTHROW AP_Proximity_MS200P(*this, state[instance], params[instance], serial_instance);
                 serial_instance++;
             }
             break;

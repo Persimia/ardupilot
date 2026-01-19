@@ -216,6 +216,14 @@ SITL::SerialDevice *SITL_State_Common::create_serial_sim(const char *name, const
         sf45b = NEW_NOTHROW SITL::PS_LightWare_SF45B();
         return sf45b;
 #endif
+#if HAL_SIM_PS_MS200P_ENABLED
+    } else if (streq(name, "ms200p")) {
+        if (ms200p != nullptr) {
+            AP_HAL::panic("Only one ms200p at a time");
+        }
+        ms200p = NEW_NOTHROW SITL::PS_MS200P();
+        return ms200p;
+#endif
 #if AP_SIM_ADSB_SAGETECH_MXS_ENABLED
     } else if (streq(name, "sagetech_mxs")) {
         if (sagetech_mxs != nullptr) {
@@ -455,6 +463,12 @@ void SITL_State_Common::sim_update(void)
 #if HAL_SIM_PS_LIGHTWARE_SF45B_ENABLED
     if (sf45b != nullptr) {
         sf45b->update(sitl_model->get_location());
+    }
+#endif
+
+#if HAL_SIM_PS_MS200P_ENABLED
+    if (ms200p != nullptr) {
+        ms200p->update(sitl_model->get_location());
     }
 #endif
 

@@ -48,6 +48,7 @@
 #include <SITL/SIM_PS_RPLidarA1.h>
 #include <SITL/SIM_PS_TeraRangerTower.h>
 #include <SITL/SIM_PS_LightWare_SF45B.h>
+#include <SITL/SIM_PS_MS200P.h>
 
 #include <SITL/SIM_RichenPower.h>
 #include <SITL/SIM_Loweheiser.h>
@@ -186,6 +187,11 @@ public:
 #if HAL_SIM_PS_LIGHTWARE_SF45B_ENABLED
     // simulated SF45B proximity sensor:
     SITL::PS_LightWare_SF45B *sf45b;
+#endif
+
+#if HAL_SIM_PS_MS200P_ENABLED
+    // simulated MS200P proximity sensor:
+    SITL::PS_MS200P *ms200p;
 #endif
 
 #if HAL_SIM_PS_TERARANGERTOWER_ENABLED

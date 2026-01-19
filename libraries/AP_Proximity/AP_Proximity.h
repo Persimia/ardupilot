@@ -91,6 +91,9 @@ public:
 #if AP_PROXIMITY_MR72_ENABLED
         MR72 = 17,
 #endif
+#if AP_PROXIMITY_MS200P_ENABLED
+        MS200P = 18,
+#endif
     };
 
     enum class Status {
